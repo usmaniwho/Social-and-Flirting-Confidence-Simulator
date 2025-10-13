@@ -5,24 +5,31 @@ class FRSComputation:
     def compute_frs(data: EmotionData, baseline: BaselineData = None) -> FRSResult:
         """
         Compute the FRS (Fluency & Readiness Score) from emotion data, compared to baseline.
-        Factors: Charisma & Friendliness, Emotional Attunement & Empathy, Confidence & Self-Regulation, Listening & Reciprocal Dialogue
+        New weights: Visual Confidence 35%, Vocal Fluency 40%, Emotional Awareness 25%
         """
-        # Calculate components based on new factors
-        charisma_friendliness = (data.smile + data.engagement) / 2.0  # Smile and engagement indicate friendliness/charisma
-        emotional_attunement_empathy = (data.eye_contact + data.engagement) / 2.0  # Eye contact and engagement for attunement
-        confidence_selfregulation = (data.vocal_tone + data.pacing) / 2.0  # Vocal tone and pacing for confidence
-        listening_reciprocal = (data.eye_contact + data.vocal_tone) / 2.0  # Eye contact and vocal tone for listening
+        # Calculate new components
+        visual_confidence = (data.eye_contact + data.smile) / 2.0  # Eye contact and smile for visual confidence
+        vocal_fluency = (data.vocal_tone + data.pacing) / 2.0  # Vocal tone and pacing for vocal fluency
+        emotional_awareness = data.engagement  # Engagement for emotional awareness
 
-        # If baseline provided, compare performance
+        # If baseline provided, compare performance (reduced threshold for higher scores)
         if baseline:
-            charisma_friendliness = max(0, charisma_friendliness - ((baseline.smile + baseline.engagement) / 2.0))
-            emotional_attunement_empathy = max(0, emotional_attunement_empathy - ((baseline.eye_contact + baseline.engagement) / 2.0))
-            confidence_selfregulation = max(0, confidence_selfregulation - ((baseline.vocal_tone + baseline.pacing) / 2.0))
-            listening_reciprocal = max(0, listening_reciprocal - ((baseline.eye_contact + baseline.vocal_tone) / 2.0))
+            baseline_visual = (baseline.eye_contact + baseline.smile) / 2.0
+            baseline_vocal = (baseline.vocal_tone + baseline.pacing) / 2.0
+            visual_confidence = max(0, visual_confidence - 0.5 * baseline_visual)
+            vocal_fluency = max(0, vocal_fluency - 0.5 * baseline_vocal)
+            emotional_awareness = max(0, emotional_awareness - 0.5 * baseline.engagement)
 
-        # Weighted FRS score (0-10 scale)
-        frs_score = (charisma_friendliness * 0.25 + emotional_attunement_empathy * 0.25 +
-                    confidence_selfregulation * 0.25 + listening_reciprocal * 0.25) * 10
+        # Weighted FRS score (0-10 scale) with new percentages
+        frs_score = (visual_confidence * 0.35 + vocal_fluency * 0.40 + emotional_awareness * 0.25) * 10
+
+        # Map to existing breakdown for compatibility
+        charisma_friendliness = visual_confidence
+        emotional_attunement_empathy = emotional_awareness
+        confidence_selfregulation = vocal_fluency
+        listening_reciprocal = (data.eye_contact + data.vocal_tone) / 2.0  # Keep for listening aspect
+        if baseline:
+            listening_reciprocal = max(0, listening_reciprocal - ((baseline.eye_contact + baseline.vocal_tone) / 2.0))
 
         # Determine medals based on FRS score and traits
         medals = []
