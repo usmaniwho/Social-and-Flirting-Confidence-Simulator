@@ -1,8 +1,36 @@
 from pydantic import BaseModel
 from typing import Optional, Dict, List
+from enum import StrEnum
+
+class Mode(StrEnum):
+    SOCIAL = "social"
+    ROMANTIC = "romantic"
+
+class Medal(StrEnum):
+    FRIENDLINESS = "Friendliness"
+    COMPOSURE = "Composure"
+    COMPASSION = "Compassion"
+    CHARISMA = "Charisma"
+    ADAPTABILITY = "Adaptability"
+    CLARITY = "Clarity"
+    AWARENESS = "Awareness"
+    PERSUASION = "Persuasion"
+
+class CalibrationStep(BaseModel):
+    step_id: str
+    instruction: str
+    line_to_read: Optional[str] = None
+    expression: Optional[str] = None
+    gesture: Optional[str] = None
+
+class CalibrationData(BaseModel):
+    user_id: str
+    steps_completed: List[str]
+    baseline_emotions: Dict[str, float]
 
 class SessionCreate(BaseModel):
     user_id: str
+    mode: Mode
     scenario: str
 
 class EmotionData(BaseModel):
@@ -20,21 +48,26 @@ class BaselineData(BaseModel):
     engagement: float
 
 class FRSResult(BaseModel):
-    visual_confidence: float
-    vocal_fluency: float
-    emotional_awareness: float
+    charisma_friendliness: float
+    emotional_attunement_empathy: float
+    confidence_selfregulation: float
+    listening_reciprocal: float
     frs_score: float
     medals: List[str]
+    stars_earned: int
 
 class ScenarioObjective(BaseModel):
     main: str
     bonus: List[str]
     medal_conditions: List[str]
+    dynamic_objectives: Optional[List[str]] = None
 
 class SessionSummary(BaseModel):
     session_id: str
     user_id: str
+    mode: Mode
     scenario: str
     frs_result: FRSResult
     feedback: Optional[Dict[str, str]] = None
     objectives_completed: Optional[List[str]] = None
+    stars_earned: int
