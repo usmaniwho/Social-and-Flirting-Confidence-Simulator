@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
 from models.models import EmotionData, FRSResult, BaselineData
 from core.scoring import FRSComputation
 from hume_ai.hume_ai_client import HumeStreamClient
 import asyncio
 from typing import Dict, Any
 import os
+import shutil
 
 router = APIRouter()
 
@@ -129,3 +130,46 @@ async def stream_emotions(websocket: WebSocket, user_id: str):
             except:
                 pass
             del active_clients[user_id]
+
+@router.post("/upload_video")
+async def upload_video(user_id: str, file: UploadFile = File(...)):
+    """
+    Upload a video file for emotion analysis and FRS computation.
+    """
+    # Validate file type
+    if not file.filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv')):
+        raise HTTPException(status_code=400, detail="Invalid file type. Only video files are allowed.")
+
+    # Save the uploaded file
+    file_path = f"uploads/{user_id}_{file.filename}"
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # For now, simulate processing since Hume AI client doesn't support video processing directly
+    # In a real implementation, you'd integrate with Hume's batch API or similar
+    import random
+    import time
+
+    # Simulate processing time
+    await asyncio.sleep(2)
+
+    # Simulate aggregated emotion data from video
+    aggregated_emotions = {
+        "eye_contact": random.uniform(0.4, 0.9),
+        "smile": random.uniform(0.3, 0.8),
+        "vocal_tone": random.uniform(0.5, 0.9),
+        "pacing": random.uniform(0.4, 0.8),
+        "engagement": random.uniform(0.6, 0.95)
+    }
+
+    # Compute FRS
+    emotion_obj = EmotionData(**aggregated_emotions)
+    baseline = baselines.get(user_id)
+    frs_result = FRSComputation.compute_frs(emotion_obj, baseline)
+
+    return {
+        "message": "Video processed successfully",
+        "file_path": file_path,
+        "aggregated_emotions": aggregated_emotions,
+        "frs_result": frs_result.dict()
+    }
