@@ -1,5 +1,7 @@
-from ._static_enums import DocumentationSections
+from ._static_enums import DocumentationSections, Mode, Medal
 
 __all__ = [
-    "DocumentationSections"
+    "DocumentationSections",
+    "Mode",
+    "Medal"
            ]
