@@ -149,6 +149,14 @@
         </div>
 
         <div class="section">
+            <h2>Video Upload Analysis</h2>
+            <p>Upload a pre-recorded video for emotion analysis and FRS scoring.</p>
+            <input type="file" id="videoFile" accept="video/*" />
+            <button id="uploadVideo">Upload & Analyze Video</button>
+            <div id="uploadStatus" class="status" style="display: none;"></div>
+        </div>
+
+        <div class="section">
             <h2>Live Metrics</h2>
             <div class="metrics">
                 <div class="metric">
@@ -222,6 +230,9 @@
         const startStreamBtn = document.getElementById('startStream');
         const stopStreamBtn = document.getElementById('stopStream');
         const streamStatus = document.getElementById('streamStatus');
+        const uploadVideoBtn = document.getElementById('uploadVideo');
+        const videoFileInput = document.getElementById('videoFile');
+        const uploadStatus = document.getElementById('uploadStatus');
         const endSessionBtn = document.getElementById('endSession');
         const feedbackDiv = document.getElementById('feedback');
 
@@ -403,6 +414,65 @@
             // Store WebSocket reference for cleanup
             window.currentWebSocket = ws;
         }
+
+        uploadVideoBtn.addEventListener('click', async () => {
+            const file = videoFileInput.files[0];
+            if (!file) {
+                uploadStatus.style.display = 'block';
+                uploadStatus.className = 'status error';
+                uploadStatus.textContent = 'Please select a video file first.';
+                return;
+            }
+
+            uploadVideoBtn.disabled = true;
+            uploadStatus.style.display = 'block';
+            uploadStatus.className = 'status info';
+            uploadStatus.textContent = 'Uploading and analyzing video...';
+
+            try {
+                const formData = new FormData();
+                formData.append('file', file);
+
+                const response = await fetch(`/api/upload_video?user_id=${userId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Upload failed: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                console.log('Video analysis result:', result);
+
+                // Display results in feedback section
+                document.getElementById('overallFrs').textContent = result.frs_result.frs_score.toFixed(1);
+                document.getElementById('visualConfidence').textContent = result.frs_result.visual_confidence.toFixed(2);
+                document.getElementById('vocalFluencyFinal').textContent = result.frs_result.vocal_fluency.toFixed(2);
+                document.getElementById('emotionalAwarenessFinal').textContent = result.frs_result.emotional_awareness.toFixed(2);
+
+                const medalsDiv = document.getElementById('medals');
+                medalsDiv.innerHTML = '';
+                result.frs_result.medals.forEach(medal => {
+                    const medalSpan = document.createElement('span');
+                    medalSpan.className = 'medal';
+                    medalSpan.textContent = medal;
+                    medalsDiv.appendChild(medalSpan);
+                });
+
+                document.getElementById('objectivesCompleted').textContent = 'Video analysis completed';
+
+                feedbackDiv.style.display = 'block';
+                uploadStatus.className = 'status success';
+                uploadStatus.textContent = 'Video analysis complete! Results displayed below.';
+            } catch (error) {
+                uploadStatus.className = 'status error';
+                uploadStatus.textContent = 'Upload failed: ' + error.message;
+                console.error('Video upload error:', error);
+            } finally {
+                uploadVideoBtn.disabled = false;
+            }
+        });
 
         endSessionBtn.addEventListener('click', async () => {
             if (!sessionId) return;
