@@ -524,19 +524,22 @@
                         return;
                     }
 
-                    // Update emotion metrics
-                    if (data.emotions) {
-                        console.log('Updating UI with emotions:', data.emotions);
-                        document.getElementById('eyeContact').textContent = data.emotions.eye_contact.toFixed(2);
-                        document.getElementById('smile').textContent = data.emotions.smile.toFixed(2);
-                        document.getElementById('vocalFluency').textContent = data.emotions.vocal_tone.toFixed(2);  // Fixed: was vocal_fluency, should be vocal_tone
-                        document.getElementById('emotionalAwareness').textContent = data.emotions.engagement.toFixed(2);  // Fixed: was emotional_awareness, should be engagement
-                    }
+                    // Only update metrics if still streaming
+                    if (isStreaming) {
+                        // Update emotion metrics
+                        if (data.emotions) {
+                            console.log('Updating UI with emotions:', data.emotions);
+                            document.getElementById('eyeContact').textContent = data.emotions.eye_contact.toFixed(2);
+                            document.getElementById('smile').textContent = data.emotions.smile.toFixed(2);
+                            document.getElementById('vocalFluency').textContent = data.emotions.vocal_tone.toFixed(2);  // Fixed: was vocal_fluency, should be vocal_tone
+                            document.getElementById('emotionalAwareness').textContent = data.emotions.engagement.toFixed(2);  // Fixed: was emotional_awareness, should be engagement
+                        }
 
-                    // Update FRS score
-                    if (data.frs) {
-                        console.log('Updating FRS score:', data.frs.frs_score);
-                        document.getElementById('frsScore').textContent = data.frs.frs_score.toFixed(1);
+                        // Update FRS score
+                        if (data.frs) {
+                            console.log('Updating FRS score:', data.frs.frs_score);
+                            document.getElementById('frsScore').textContent = data.frs.frs_score.toFixed(1);
+                        }
                     }
                 } catch (error) {
                     console.error('Error parsing WebSocket message:', error);
