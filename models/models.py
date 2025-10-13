@@ -1,20 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 from enum import StrEnum
-
-class Mode(StrEnum):
-    SOCIAL = "social"
-    ROMANTIC = "romantic"
-
-class Medal(StrEnum):
-    FRIENDLINESS = "Friendliness"
-    COMPOSURE = "Composure"
-    COMPASSION = "Compassion"
-    CHARISMA = "Charisma"
-    ADAPTABILITY = "Adaptability"
-    CLARITY = "Clarity"
-    AWARENESS = "Awareness"
-    PERSUASION = "Persuasion"
+from core.data_contract import Mode
 
 class CalibrationStep(BaseModel):
     step_id: str

@@ -1,4 +1,5 @@
-from models.models import EmotionData, FRSResult, BaselineData, Medal
+from models.models import EmotionData, FRSResult, BaselineData
+from core.data_contract._static_enums import Medal
 
 class FRSComputation:
     @staticmethod
