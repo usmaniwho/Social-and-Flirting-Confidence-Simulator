@@ -98,6 +98,19 @@
             font-weight: bold;
             color: #4CAF50;
         }
+        .stars {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin: 10px 0;
+        }
+        .star {
+            font-size: 24px;
+            color: #ddd;
+        }
+        .star.filled {
+            color: gold;
+        }
         .feedback {
             background: #e8f5e8;
             padding: 15px;
@@ -126,12 +139,25 @@
             <h2>Calibration Phase</h2>
             <p>Before starting, we'll establish your baseline by reading aloud some lines and showing expressions.</p>
             <button id="startCalibration">Start Calibration</button>
+            <div id="calibrationSteps" style="display: none;">
+                <div id="currentStep"></div>
+                <button id="nextStep" disabled>Next Step</button>
+                <div id="stepProgress">Step 0 of 11</div>
+            </div>
             <div id="calibrationStatus" class="status" style="display: none;"></div>
         </div>
 
         <div class="section">
+            <h2>Mode Selection</h2>
+            <select id="modeSelect">
+                <option value="">Select a mode...</option>
+            </select>
+            <div id="modeStatus" class="status" style="display: none;"></div>
+        </div>
+
+        <div class="section">
             <h2>Scenario Selection</h2>
-            <select id="scenarioSelect">
+            <select id="scenarioSelect" disabled>
                 <option value="">Select a scenario...</option>
             </select>
             <button id="startSession" disabled>Start Session</button>
@@ -189,22 +215,28 @@
 
         <div class="section">
             <h2>Feedback & Results</h2>
-            <button id="endSession" disabled>End Session & Get Feedback</button>
+            <button id="endSession" disabled>End Session</button>
+            <button id="getFeedback" disabled>Get Feedback</button>
             <div id="feedback" class="feedback" style="display: none;">
                 <h3>Session Summary</h3>
                 <p><strong>Overall FRS Score:</strong> <span id="overallFrs"></span></p>
+                <div class="stars" id="stars"></div>
                 <div class="metrics">
                     <div class="metric">
-                        <h3>Visual Confidence</h3>
-                        <div class="value" id="visualConfidence"></div>
+                        <h3>Charisma & Friendliness</h3>
+                        <div class="value" id="charismaFriendliness"></div>
                     </div>
                     <div class="metric">
-                        <h3>Vocal Fluency</h3>
-                        <div class="value" id="vocalFluencyFinal"></div>
+                        <h3>Emotional Attunement & Empathy</h3>
+                        <div class="value" id="emotionalAttunementEmpathy"></div>
                     </div>
                     <div class="metric">
-                        <h3>Emotional Awareness</h3>
-                        <div class="value" id="emotionalAwarenessFinal"></div>
+                        <h3>Confidence & Self-Regulation</h3>
+                        <div class="value" id="confidenceSelfregulation"></div>
+                    </div>
+                    <div class="metric">
+                        <h3>Listening & Reciprocal Dialogue</h3>
+                        <div class="value" id="listeningReciprocal"></div>
                     </div>
                 </div>
                 <p><strong>Medals Earned:</strong></p>
@@ -224,6 +256,8 @@
         // DOM elements
         const startCalibrationBtn = document.getElementById('startCalibration');
         const calibrationStatus = document.getElementById('calibrationStatus');
+        const modeSelect = document.getElementById('modeSelect');
+        const modeStatus = document.getElementById('modeStatus');
         const scenarioSelect = document.getElementById('scenarioSelect');
         const startSessionBtn = document.getElementById('startSession');
         const sessionStatus = document.getElementById('sessionStatus');
@@ -234,14 +268,53 @@
         const videoFileInput = document.getElementById('videoFile');
         const uploadStatus = document.getElementById('uploadStatus');
         const endSessionBtn = document.getElementById('endSession');
+        const getFeedbackBtn = document.getElementById('getFeedback');
         const feedbackDiv = document.getElementById('feedback');
 
-        // Load scenarios on page load
-        window.onload = loadScenarios;
+        function updateStars(score) {
+            const starsDiv = document.getElementById('stars');
+            starsDiv.innerHTML = '';
+            const starCount = Math.round(score / 2); // Assuming score out of 10, 5 stars max
+            for (let i = 0; i < 5; i++) {
+                const star = document.createElement('span');
+                star.className = 'star';
+                if (i < starCount) {
+                    star.classList.add('filled');
+                }
+                star.textContent = '★';
+                starsDiv.appendChild(star);
+            }
+        }
 
-        async function loadScenarios() {
+        // Load modes and scenarios on page load
+        window.onload = loadModes;
+
+        async function loadModes() {
             try {
-                const response = await fetch('/session/scenarios');
+                const response = await fetch('/session/modes');
+                const data = await response.json();
+                modeSelect.innerHTML = '<option value="">Select a mode...</option>';
+                data.modes.forEach(mode => {
+                    const option = document.createElement('option');
+                    option.value = mode;
+                    option.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+                    modeSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading modes:', error);
+            }
+        }
+
+        modeSelect.addEventListener('change', async () => {
+            const mode = modeSelect.value;
+            if (!mode) {
+                scenarioSelect.disabled = true;
+                scenarioSelect.innerHTML = '<option value="">Select a scenario...</option>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`/session/scenarios/${mode}`);
                 const data = await response.json();
                 scenarioSelect.innerHTML = '<option value="">Select a scenario...</option>';
                 data.scenarios.forEach(scenario => {
@@ -250,10 +323,14 @@
                     option.textContent = scenario.replace('_', ' ').toUpperCase();
                     scenarioSelect.appendChild(option);
                 });
+                scenarioSelect.disabled = false;
             } catch (error) {
                 console.error('Error loading scenarios:', error);
+                modeStatus.style.display = 'block';
+                modeStatus.className = 'status error';
+                modeStatus.textContent = 'Failed to load scenarios for this mode.';
             }
-        }
+        });
 
         startCalibrationBtn.addEventListener('click', async () => {
             startCalibrationBtn.disabled = true;
@@ -262,27 +339,83 @@
             calibrationStatus.textContent = 'Starting calibration...';
 
             try {
-                // Simulate calibration data (in real app, this would come from webcam/mic)
-                const calibrationData = {
-                    eye_contact: 0.8,
-                    smile: 0.7,
-                    vocal_tone: 0.6,
-                    pacing: 0.5,
-                    engagement: 0.9
-                };
+                // Fetch calibration steps
+                const stepsResponse = await fetch('/api/calibration/steps');
+                const stepsData = await stepsResponse.json();
+                const steps = stepsData.steps;
 
-                const response = await fetch(`/api/calibrate?user_id=${userId}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(calibrationData)
+                // Show calibration steps UI
+                const calibrationStepsDiv = document.getElementById('calibrationSteps');
+                const currentStepDiv = document.getElementById('currentStep');
+                const nextStepBtn = document.getElementById('nextStep');
+                const stepProgressDiv = document.getElementById('stepProgress');
+
+                calibrationStepsDiv.style.display = 'block';
+                let currentStepIndex = 0;
+
+                function showStep(stepIndex) {
+                    const step = steps[stepIndex];
+                    currentStepDiv.innerHTML = `
+                        <p><strong>${step.instruction}</strong></p>
+                        ${step.line_to_read ? `<p>"${step.line_to_read}"</p>` : ''}
+                        ${step.expression ? `<p>Expression: ${step.expression}</p>` : ''}
+                        ${step.gesture ? `<p>Gesture: ${step.gesture}</p>` : ''}
+                    `;
+                    stepProgressDiv.textContent = `Step ${stepIndex + 1} of ${steps.length}`;
+                    nextStepBtn.disabled = false;
+                }
+
+                showStep(currentStepIndex);
+
+                nextStepBtn.addEventListener('click', async () => {
+                    nextStepBtn.disabled = true;
+
+                    // Simulate emotion data for this step
+                    const emotionData = {
+                        eye_contact: Math.random() * 0.5 + 0.5,
+                        smile: Math.random() * 0.5 + 0.5,
+                        vocal_tone: Math.random() * 0.5 + 0.5,
+                        pacing: Math.random() * 0.5 + 0.5,
+                        engagement: Math.random() * 0.5 + 0.5
+                    };
+
+                    try {
+                        // Send step data to backend
+                        const stepResponse = await fetch(`/api/calibrate/step?user_id=${userId}&step_id=${steps[currentStepIndex].step_id}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(emotionData)
+                        });
+
+                        if (!stepResponse.ok) {
+                            throw new Error(`Step calibration failed: ${stepResponse.statusText}`);
+                        }
+
+                        currentStepIndex++;
+                        if (currentStepIndex < steps.length) {
+                            showStep(currentStepIndex);
+                        } else {
+                            // Complete calibration
+                            const completeResponse = await fetch(`/api/calibrate/complete?user_id=${userId}`, {
+                                method: 'POST'
+                            });
+
+                            const result = await completeResponse.json();
+                            baseline = result.baseline;
+
+                            calibrationStatus.className = 'status success';
+                            calibrationStatus.textContent = 'Calibration complete! Baseline established.';
+                            calibrationStepsDiv.style.display = 'none';
+                            startSessionBtn.disabled = false;
+                        }
+                    } catch (error) {
+                        calibrationStatus.className = 'status error';
+                        calibrationStatus.textContent = 'Calibration failed: ' + error.message;
+                        calibrationStepsDiv.style.display = 'none';
+                        startCalibrationBtn.disabled = false;
+                    }
                 });
 
-                const result = await response.json();
-                baseline = result.baseline;
-
-                calibrationStatus.className = 'status success';
-                calibrationStatus.textContent = 'Calibration complete! Baseline established.';
-                startSessionBtn.disabled = false;
             } catch (error) {
                 calibrationStatus.className = 'status error';
                 calibrationStatus.textContent = 'Calibration failed: ' + error.message;
@@ -291,8 +424,9 @@
         });
 
         startSessionBtn.addEventListener('click', async () => {
+            const mode = modeSelect.value;
             const scenario = scenarioSelect.value;
-            if (!scenario) return;
+            if (!scenario || !mode) return;
 
             startSessionBtn.disabled = true;
             sessionStatus.style.display = 'block';
@@ -303,8 +437,12 @@
                 const response = await fetch('/session/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, scenario: scenario })
+                    body: JSON.stringify({ user_id: userId, mode: mode, scenario: scenario })
                 });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
 
                 const result = await response.json();
                 sessionId = result.session_id;
@@ -318,12 +456,15 @@
                 `;
                 startStreamBtn.disabled = false;
                 endSessionBtn.disabled = false;
+                getFeedbackBtn.disabled = true; // Initially disabled until session is ended
             } catch (error) {
                 sessionStatus.className = 'status error';
                 sessionStatus.textContent = 'Failed to start session: ' + error.message;
                 startSessionBtn.disabled = false;
             }
         });
+
+
 
         startStreamBtn.addEventListener('click', async () => {
             try {
@@ -355,10 +496,15 @@
             stopStreamBtn.disabled = true;
             streamStatus.className = 'status info';
             streamStatus.textContent = 'Stream stopped.';
+
+            // Send stop message to WebSocket to halt server-side streaming
+            if (window.currentWebSocket && window.currentWebSocket.readyState === WebSocket.OPEN) {
+                window.currentWebSocket.send(JSON.stringify({ action: 'stop' }));
+            }
         });
 
         function connectWebSocket() {
-            const wsUrl = `ws://127.0.0.1:8000/api/stream/${userId}`;
+            const wsUrl = `ws://127.0.0.1:8000/api/stream/${sessionId}`;
             const ws = new WebSocket(wsUrl);
 
             ws.onopen = () => {
@@ -447,9 +593,11 @@
 
                 // Display results in feedback section
                 document.getElementById('overallFrs').textContent = result.frs_result.frs_score.toFixed(1);
-                document.getElementById('visualConfidence').textContent = result.frs_result.visual_confidence.toFixed(2);
-                document.getElementById('vocalFluencyFinal').textContent = result.frs_result.vocal_fluency.toFixed(2);
-                document.getElementById('emotionalAwarenessFinal').textContent = result.frs_result.emotional_awareness.toFixed(2);
+                updateStars(result.frs_result.frs_score);
+                document.getElementById('charismaFriendliness').textContent = result.frs_result.charisma_friendliness.toFixed(2);
+                document.getElementById('emotionalAttunementEmpathy').textContent = result.frs_result.emotional_attunement_empathy.toFixed(2);
+                document.getElementById('confidenceSelfregulation').textContent = result.frs_result.confidence_selfregulation.toFixed(2);
+                document.getElementById('listeningReciprocal').textContent = result.frs_result.listening_reciprocal.toFixed(2);
 
                 const medalsDiv = document.getElementById('medals');
                 medalsDiv.innerHTML = '';
@@ -478,13 +626,41 @@
             if (!sessionId) return;
 
             try {
+                // End the session
+                const endResponse = await fetch(`/session/end/${sessionId}`, {
+                    method: 'POST'
+                });
+                if (!endResponse.ok) {
+                    throw new Error(`Failed to end session: ${endResponse.statusText}`);
+                }
+
+                sessionStatus.className = 'status success';
+                sessionStatus.textContent = 'Session ended successfully. You can now get your feedback.';
+                endSessionBtn.disabled = true;
+                getFeedbackBtn.disabled = false;
+                stopStreamBtn.click(); // Stop stream
+            } catch (error) {
+                console.error('Error ending session:', error);
+                alert('Failed to end session: ' + error.message);
+            }
+        });
+
+        getFeedbackBtn.addEventListener('click', async () => {
+            if (!sessionId) return;
+
+            try {
                 const response = await fetch(`/feedback/${sessionId}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to get feedback: ${response.statusText}`);
+                }
                 const feedback = await response.json();
 
                 document.getElementById('overallFrs').textContent = feedback.overall_frs;
-                document.getElementById('visualConfidence').textContent = feedback.breakdown.visual_confidence.toFixed(2);
-                document.getElementById('vocalFluencyFinal').textContent = feedback.breakdown.vocal_fluency.toFixed(2);
-                document.getElementById('emotionalAwarenessFinal').textContent = feedback.breakdown.emotional_awareness.toFixed(2);
+                updateStars(feedback.overall_frs);
+                document.getElementById('charismaFriendliness').textContent = feedback.breakdown.charisma_friendliness.toFixed(2);
+                document.getElementById('emotionalAttunementEmpathy').textContent = feedback.breakdown.emotional_attunement_empathy.toFixed(2);
+                document.getElementById('confidenceSelfregulation').textContent = feedback.breakdown.confidence_selfregulation.toFixed(2);
+                document.getElementById('listeningReciprocal').textContent = feedback.breakdown.listening_reciprocal.toFixed(2);
 
                 const medalsDiv = document.getElementById('medals');
                 medalsDiv.innerHTML = '';
@@ -498,10 +674,10 @@
                 document.getElementById('objectivesCompleted').textContent = feedback.objectives_completed.join(', ');
 
                 feedbackDiv.style.display = 'block';
-                endSessionBtn.disabled = true;
-                stopStreamBtn.click(); // Stop stream
+                getFeedbackBtn.disabled = true; // Disable after showing results
             } catch (error) {
                 console.error('Error getting feedback:', error);
+                alert('Failed to get feedback: ' + error.message);
             }
         });
     </script>
