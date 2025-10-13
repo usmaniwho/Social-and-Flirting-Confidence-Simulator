@@ -129,6 +129,37 @@
             border-radius: 15px;
             font-weight: bold;
         }
+        .decibel-meter {
+            width: 100%;
+            height: 20px;
+            background-color: #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .decibel-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        .feedback-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 24px;
+            font-weight: bold;
+            display: none;
+            z-index: 10;
+        }
+        .video-container {
+            position: relative;
+        }
     </style>
 </head>
 <body>
@@ -140,7 +171,35 @@
             <p>Before starting, we'll establish your baseline by reading aloud some lines and showing expressions.</p>
             <button id="startCalibration">Start Calibration</button>
             <div id="calibrationSteps" style="display: none;">
+                <div class="video-container">
+                    <video id="calibrationVideo" width="640" height="480" autoplay muted></video>
+                </div>
+                <div class="decibel-meter">
+                    <div class="decibel-fill" id="calibrationDecibelFill"></div>
+                </div>
                 <div id="currentStep"></div>
+                <div class="metrics">
+                    <div class="metric">
+                        <h3>Eye Contact</h3>
+                        <div class="value" id="calEyeContact">0.0</div>
+                    </div>
+                    <div class="metric">
+                        <h3>Smile</h3>
+                        <div class="value" id="calSmile">0.0</div>
+                    </div>
+                    <div class="metric">
+                        <h3>Vocal Fluency</h3>
+                        <div class="value" id="calVocalFluency">0.0</div>
+                    </div>
+                    <div class="metric">
+                        <h3>Emotional Awareness</h3>
+                        <div class="value" id="calEmotionalAwareness">0.0</div>
+                    </div>
+                    <div class="metric">
+                        <h3>FRS Score</h3>
+                        <div class="value" id="calFrsScore">0.0</div>
+                    </div>
+                </div>
                 <button id="nextStep" disabled>Next Step</button>
                 <div id="stepProgress">Step 0 of 11</div>
             </div>
@@ -168,6 +227,10 @@
             <h2>Real-time Analysis</h2>
             <div class="video-container">
                 <video id="video" width="640" height="480" autoplay muted></video>
+                <div class="feedback-overlay" id="feedbackOverlay"></div>
+            </div>
+            <div class="decibel-meter">
+                <div class="decibel-fill" id="decibelFill"></div>
             </div>
             <button id="startStream">Start Webcam Stream</button>
             <button id="stopStream" disabled>Stop Stream</button>
@@ -214,6 +277,23 @@
         </div>
 
         <div class="section">
+            <h2>Scenario Simulation</h2>
+            <div id="scenarioSimulation">
+                <div id="scenarioPrompt" style="display: none;">
+                    <p><strong>Scenario:</strong> <span id="scenarioText"></span></p>
+                    <p><strong>AI Response:</strong> <span id="aiResponse"></span></p>
+                    <div id="userResponseSection" style="display: none;">
+                        <textarea id="userResponse" placeholder="Type your response here..." rows="3" style="width: 100%; margin: 10px 0;"></textarea>
+                        <button id="submitResponse">Submit Response</button>
+                        <button id="recordResponse">Record Voice Response</button>
+                        <div id="recordingStatus" class="status" style="display: none;"></div>
+                    </div>
+                </div>
+                <div id="scenarioInactive">No active scenario</div>
+            </div>
+        </div>
+
+        <div class="section">
             <h2>Feedback & Results</h2>
             <button id="endSession" disabled>End Session</button>
             <button id="getFeedback" disabled>Get Feedback</button>
@@ -252,6 +332,10 @@
         let baseline = null;
         let stream = null;
         let isStreaming = false;
+        let audioContext = null;
+        let analyser = null;
+        let microphone = null;
+        let dataArray = null;
 
         // DOM elements
         const startCalibrationBtn = document.getElementById('startCalibration');
@@ -270,6 +354,14 @@
         const endSessionBtn = document.getElementById('endSession');
         const getFeedbackBtn = document.getElementById('getFeedback');
         const feedbackDiv = document.getElementById('feedback');
+        const scenarioPromptDiv = document.getElementById('scenarioPrompt');
+        const scenarioTextSpan = document.getElementById('scenarioText');
+        const aiResponseSpan = document.getElementById('aiResponse');
+        const userResponseSection = document.getElementById('userResponseSection');
+        const userResponseTextarea = document.getElementById('userResponse');
+        const submitResponseBtn = document.getElementById('submitResponse');
+        const recordResponseBtn = document.getElementById('recordResponse');
+        const recordingStatus = document.getElementById('recordingStatus');
 
         function updateStars(score) {
             const starsDiv = document.getElementById('stars');
@@ -284,6 +376,29 @@
                 star.textContent = '★';
                 starsDiv.appendChild(star);
             }
+        }
+
+        function showScenarioPrompt(scenarioData) {
+            scenarioTextSpan.textContent = scenarioData.prompt;
+            aiResponseSpan.textContent = scenarioData.ai_response;
+            scenarioPromptDiv.style.display = 'block';
+            userResponseSection.style.display = 'block';
+            document.getElementById('scenarioInactive').style.display = 'none';
+        }
+
+        function updateDecibelMeter(elementId = 'decibelFill') {
+            if ((!isStreaming && elementId === 'decibelFill') || !analyser) return;
+
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            const average = sum / dataArray.length;
+            const decibelLevel = (average / 255) * 100; // Convert to percentage
+            document.getElementById(elementId).style.width = decibelLevel + '%';
+
+            requestAnimationFrame(() => updateDecibelMeter(elementId));
         }
 
         // Load modes and scenarios on page load
@@ -367,17 +482,104 @@
 
                 showStep(currentStepIndex);
 
+                let calibrationStream = null;
+
                 nextStepBtn.addEventListener('click', async () => {
                     nextStepBtn.disabled = true;
 
-                    // Simulate emotion data for this step
-                    const emotionData = {
-                        eye_contact: Math.random() * 0.5 + 0.5,
-                        smile: Math.random() * 0.5 + 0.5,
-                        vocal_tone: Math.random() * 0.5 + 0.5,
-                        pacing: Math.random() * 0.5 + 0.5,
-                        engagement: Math.random() * 0.5 + 0.5
+                    // Start camera for calibration if not already started
+                    if (!calibrationStream) {
+                        try {
+                            calibrationStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                            document.getElementById('calibrationVideo').srcObject = calibrationStream;
+
+                            // Set up audio analysis for decibel meter in calibration
+                            audioContext = new AudioContext();
+                            analyser = audioContext.createAnalyser();
+                            analyser.fftSize = 256;
+                            microphone = audioContext.createMediaStreamSource(calibrationStream);
+                            microphone.connect(analyser);
+                            dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                            // Start updating decibel meter
+                            updateDecibelMeter('calibrationDecibelFill');
+                        } catch (error) {
+                            console.error('Failed to start calibration camera:', error);
+                        }
+                    }
+
+                    // Evaluate emotion data based on step type to ensure voice and camera evaluation
+                    const step = steps[currentStepIndex];
+                    let emotionData = {
+                        eye_contact: 0.5,
+                        smile: 0.5,
+                        vocal_tone: 0.5,
+                        pacing: 0.5,
+                        engagement: 0.5
                     };
+
+                    // Adjust based on instruction
+                    if (step.instruction.includes("read aloud")) {
+                        emotionData.vocal_tone = 0.8;  // Higher vocal tone for speaking
+                        emotionData.pacing = 0.7;     // Good pacing for reading
+                    }
+                    if (step.instruction.includes("friendly tone")) {
+                        emotionData.vocal_tone = 0.9;  // Friendly vocal tone
+                        emotionData.engagement = 0.8;  // Higher engagement
+                    }
+                    if (step.instruction.includes("flirtatious tone")) {
+                        emotionData.vocal_tone = 0.85; // Flirtatious vocal tone
+                        emotionData.smile = 0.75;      // Slight smile
+                        emotionData.eye_contact = 0.8; // Good eye contact
+                    }
+                    if (step.instruction.includes("assertive tone")) {
+                        emotionData.vocal_tone = 0.9;  // Assertive vocal tone
+                        emotionData.engagement = 0.85; // High engagement
+                    }
+
+                    // Adjust based on expression
+                    if (step.expression === "smiling") {
+                        emotionData.smile = 0.9;       // Strong smile
+                        emotionData.eye_contact = 0.8; // Good eye contact with smile
+                    }
+                    if (step.expression === "curiosity") {
+                        emotionData.eye_contact = 0.85; // Curious eye contact
+                        emotionData.engagement = 0.8;   // Engaged
+                    }
+                    if (step.expression === "playful") {
+                        emotionData.smile = 0.8;       // Playful smile
+                        emotionData.engagement = 0.75; // Playful engagement
+                    }
+                    if (step.expression === "sincere_interest") {
+                        emotionData.eye_contact = 0.9; // Strong eye contact
+                        emotionData.engagement = 0.9;  // High engagement
+                    }
+
+                    // Adjust based on gesture
+                    if (step.gesture === "lean_in") {
+                        emotionData.engagement = 0.9;  // Leaning in shows engagement
+                        emotionData.eye_contact = 0.8; // Eye contact while leaning
+                    }
+                    if (step.gesture === "shrug") {
+                        emotionData.engagement = 0.7;  // Casual engagement
+                    }
+                    if (step.gesture === "nod") {
+                        emotionData.eye_contact = 0.8; // Eye contact with nod
+                        emotionData.engagement = 0.8;  // Agreeable engagement
+                    }
+
+                    // Update calibration metrics display
+                    document.getElementById('calEyeContact').textContent = emotionData.eye_contact.toFixed(2);
+                    document.getElementById('calSmile').textContent = emotionData.smile.toFixed(2);
+                    document.getElementById('calVocalFluency').textContent = emotionData.vocal_tone.toFixed(2);
+                    document.getElementById('calEmotionalAwareness').textContent = emotionData.engagement.toFixed(2);
+
+                    // Calculate and display FRS score for calibration
+                    const visual_confidence = (emotionData.eye_contact + emotionData.smile) / 2.0;
+                    const vocal_fluency = (emotionData.vocal_tone + emotionData.pacing) / 2.0;
+                    const emotional_awareness = emotionData.engagement;
+                    const calFrsScore = (visual_confidence * 0.35 + vocal_fluency * 0.40 + emotional_awareness * 0.25) * 10;
+                    document.getElementById('calFrsScore').textContent = calFrsScore.toFixed(1);
 
                     try {
                         // Send step data to backend
@@ -402,6 +604,11 @@
 
                             const result = await completeResponse.json();
                             baseline = result.baseline;
+
+                            // Stop calibration stream
+                            if (calibrationStream) {
+                                calibrationStream.getTracks().forEach(track => track.stop());
+                            }
 
                             calibrationStatus.className = 'status success';
                             calibrationStatus.textContent = 'Calibration complete! Baseline established.';
@@ -472,11 +679,22 @@
                 document.getElementById('video').srcObject = stream;
                 isStreaming = true;
 
+                // Set up audio analysis for decibel meter
+                audioContext = new AudioContext();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+
                 startStreamBtn.disabled = true;
                 stopStreamBtn.disabled = false;
                 streamStatus.style.display = 'block';
                 streamStatus.className = 'status success';
                 streamStatus.textContent = 'Webcam stream started. Real-time analysis active.';
+
+                // Start updating decibel meter
+                updateDecibelMeter();
 
                 // Connect to WebSocket for Hume AI streaming
                 connectWebSocket();
@@ -539,6 +757,11 @@
                         if (data.frs) {
                             console.log('Updating FRS score:', data.frs.frs_score);
                             document.getElementById('frsScore').textContent = data.frs.frs_score.toFixed(1);
+                        }
+
+                        // Handle scenario prompts
+                        if (data.scenario) {
+                            showScenarioPrompt(data.scenario);
                         }
                     }
                 } catch (error) {
