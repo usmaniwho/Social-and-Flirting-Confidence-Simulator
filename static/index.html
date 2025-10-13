@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Social & Flirting Confidence Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #555;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .video-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        video {
+            border: 2px solid #ddd;
+            border-radius: 5px;
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .metric {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .metric h3 {
+            margin: 0 0 5px 0;
+            color: #333;
+        }
+        .metric .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .feedback {
+            background: #e8f5e8;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .medals {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .medal {
+            background: gold;
+            color: #333;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Social & Flirting Confidence Simulator</h1>
+
+        <div class="section">
+            <h2>Calibration Phase</h2>
+            <p>Before starting, we'll establish your baseline by reading aloud some lines and showing expressions.</p>
+            <button id="startCalibration">Start Calibration</button>
+            <div id="calibrationStatus" class="status" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>Scenario Selection</h2>
+            <select id="scenarioSelect">
+                <option value="">Select a scenario...</option>
+            </select>
+            <button id="startSession" disabled>Start Session</button>
+            <div id="sessionStatus" class="status" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>Real-time Analysis</h2>
+            <div class="video-container">
+                <video id="video" width="640" height="480" autoplay muted></video>
+            </div>
+            <button id="startStream">Start Webcam Stream</button>
+            <button id="stopStream" disabled>Stop Stream</button>
+            <div id="streamStatus" class="status" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>Live Metrics</h2>
+            <div class="metrics">
+                <div class="metric">
+                    <h3>Eye Contact</h3>
+                    <div class="value" id="eyeContact">0.0</div>
+                </div>
+                <div class="metric">
+                    <h3>Smile</h3>
+                    <div class="value" id="smile">0.0</div>
+                </div>
+                <div class="metric">
+                    <h3>Vocal Fluency</h3>
+                    <div class="value" id="vocalFluency">0.0</div>
+                </div>
+                <div class="metric">
+                    <h3>Emotional Awareness</h3>
+                    <div class="value" id="emotionalAwareness">0.0</div>
+                </div>
+                <div class="metric">
+                    <h3>FRS Score</h3>
+                    <div class="value" id="frsScore">0.0</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Session Objectives</h2>
+            <div id="objectives">No active session</div>
+        </div>
+
+        <div class="section">
+            <h2>Feedback & Results</h2>
+            <button id="endSession" disabled>End Session & Get Feedback</button>
+            <div id="feedback" class="feedback" style="display: none;">
+                <h3>Session Summary</h3>
+                <p><strong>Overall FRS Score:</strong> <span id="overallFrs"></span></p>
+                <div class="metrics">
+                    <div class="metric">
+                        <h3>Visual Confidence</h3>
+                        <div class="value" id="visualConfidence"></div>
+                    </div>
+                    <div class="metric">
+                        <h3>Vocal Fluency</h3>
+                        <div class="value" id="vocalFluencyFinal"></div>
+                    </div>
+                    <div class="metric">
+                        <h3>Emotional Awareness</h3>
+                        <div class="value" id="emotionalAwarenessFinal"></div>
+                    </div>
+                </div>
+                <p><strong>Medals Earned:</strong></p>
+                <div class="medals" id="medals"></div>
+                <p><strong>Objectives Completed:</strong> <span id="objectivesCompleted"></span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let userId = 'user_' + Date.now();
+        let sessionId = null;
+        let baseline = null;
+        let stream = null;
+        let isStreaming = false;
+
+        // DOM elements
+        const startCalibrationBtn = document.getElementById('startCalibration');
+        const calibrationStatus = document.getElementById('calibrationStatus');
+        const scenarioSelect = document.getElementById('scenarioSelect');
+        const startSessionBtn = document.getElementById('startSession');
+        const sessionStatus = document.getElementById('sessionStatus');
+        const startStreamBtn = document.getElementById('startStream');
+        const stopStreamBtn = document.getElementById('stopStream');
+        const streamStatus = document.getElementById('streamStatus');
+        const endSessionBtn = document.getElementById('endSession');
+        const feedbackDiv = document.getElementById('feedback');
+
+        // Load scenarios on page load
+        window.onload = loadScenarios;
+
+        async function loadScenarios() {
+            try {
+                const response = await fetch('/session/scenarios');
+                const data = await response.json();
+                scenarioSelect.innerHTML = '<option value="">Select a scenario...</option>';
+                data.scenarios.forEach(scenario => {
+                    const option = document.createElement('option');
+                    option.value = scenario;
+                    option.textContent = scenario.replace('_', ' ').toUpperCase();
+                    scenarioSelect.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Error loading scenarios:', error);
+            }
+        }
+
+        startCalibrationBtn.addEventListener('click', async () => {
+            startCalibrationBtn.disabled = true;
+            calibrationStatus.style.display = 'block';
+            calibrationStatus.className = 'status info';
+            calibrationStatus.textContent = 'Starting calibration...';
+
+            try {
+                // Simulate calibration data (in real app, this would come from webcam/mic)
+                const calibrationData = {
+                    eye_contact: 0.8,
+                    smile: 0.7,
+                    vocal_tone: 0.6,
+                    pacing: 0.5,
+                    engagement: 0.9
+                };
+
+                const response = await fetch(`/api/calibrate?user_id=${userId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(calibrationData)
+                });
+
+                const result = await response.json();
+                baseline = result.baseline;
+
+                calibrationStatus.className = 'status success';
+                calibrationStatus.textContent = 'Calibration complete! Baseline established.';
+                startSessionBtn.disabled = false;
+            } catch (error) {
+                calibrationStatus.className = 'status error';
+                calibrationStatus.textContent = 'Calibration failed: ' + error.message;
+                startCalibrationBtn.disabled = false;
+            }
+        });
+
+        startSessionBtn.addEventListener('click', async () => {
+            const scenario = scenarioSelect.value;
+            if (!scenario) return;
+
+            startSessionBtn.disabled = true;
+            sessionStatus.style.display = 'block';
+            sessionStatus.className = 'status info';
+            sessionStatus.textContent = 'Starting session...';
+
+            try {
+                const response = await fetch('/session/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, scenario: scenario })
+                });
+
+                const result = await response.json();
+                sessionId = result.session_id;
+
+                sessionStatus.className = 'status success';
+                sessionStatus.textContent = `Session started! Main objective: ${result.objectives.main}`;
+                document.getElementById('objectives').innerHTML = `
+                    <strong>Main:</strong> ${result.objectives.main}<br>
+                    <strong>Bonus:</strong> ${result.objectives.bonus.join(', ')}<br>
+                    <strong>Medal Conditions:</strong> ${result.objectives.medal_conditions.join(', ')}
+                `;
+                startStreamBtn.disabled = false;
+                endSessionBtn.disabled = false;
+            } catch (error) {
+                sessionStatus.className = 'status error';
+                sessionStatus.textContent = 'Failed to start session: ' + error.message;
+                startSessionBtn.disabled = false;
+            }
+        });
+
+        startStreamBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('video').srcObject = stream;
+                isStreaming = true;
+
+                startStreamBtn.disabled = true;
+                stopStreamBtn.disabled = false;
+                streamStatus.style.display = 'block';
+                streamStatus.className = 'status success';
+                streamStatus.textContent = 'Webcam stream started. Real-time analysis active.';
+
+                // Connect to WebSocket for Hume AI streaming
+                connectWebSocket();
+            } catch (error) {
+                streamStatus.style.display = 'block';
+                streamStatus.className = 'status error';
+                streamStatus.textContent = 'Failed to start webcam: ' + error.message;
+            }
+        });
+
+        stopStreamBtn.addEventListener('click', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                isStreaming = false;
+            }
+            startStreamBtn.disabled = false;
+            stopStreamBtn.disabled = true;
+            streamStatus.className = 'status info';
+            streamStatus.textContent = 'Stream stopped.';
+        });
+
+        function connectWebSocket() {
+            const wsUrl = `ws://127.0.0.1:8000/api/stream/${userId}`;
+            const ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                streamStatus.textContent = 'Webcam stream started. Hume AI analysis active.';
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Received WebSocket data:', data);
+
+                    if (data.error) {
+                        console.error('WebSocket error:', data.error);
+                        streamStatus.className = 'status error';
+                        streamStatus.textContent = 'Analysis error: ' + data.error;
+                        return;
+                    }
+
+                    // Update emotion metrics
+                    if (data.emotions) {
+                        console.log('Updating UI with emotions:', data.emotions);
+                        document.getElementById('eyeContact').textContent = data.emotions.eye_contact.toFixed(2);
+                        document.getElementById('smile').textContent = data.emotions.smile.toFixed(2);
+                        document.getElementById('vocalFluency').textContent = data.emotions.vocal_tone.toFixed(2);  // Fixed: was vocal_fluency, should be vocal_tone
+                        document.getElementById('emotionalAwareness').textContent = data.emotions.engagement.toFixed(2);  // Fixed: was emotional_awareness, should be engagement
+                    }
+
+                    // Update FRS score
+                    if (data.frs) {
+                        console.log('Updating FRS score:', data.frs.frs_score);
+                        document.getElementById('frsScore').textContent = data.frs.frs_score.toFixed(1);
+                    }
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                streamStatus.className = 'status error';
+                streamStatus.textContent = 'Connection error. Check Hume API key.';
+            };
+
+            ws.onclose = (event) => {
+                console.log('WebSocket closed, code:', event.code, 'reason:', event.reason);
+                if (isStreaming) {
+                    streamStatus.className = 'status info';
+                    streamStatus.textContent = 'Analysis stopped.';
+                }
+            };
+
+            // Store WebSocket reference for cleanup
+            window.currentWebSocket = ws;
+        }
+
+        endSessionBtn.addEventListener('click', async () => {
+            if (!sessionId) return;
+
+            try {
+                const response = await fetch(`/feedback/${sessionId}`);
+                const feedback = await response.json();
+
+                document.getElementById('overallFrs').textContent = feedback.overall_frs;
+                document.getElementById('visualConfidence').textContent = feedback.breakdown.visual_confidence.toFixed(2);
+                document.getElementById('vocalFluencyFinal').textContent = feedback.breakdown.vocal_fluency.toFixed(2);
+                document.getElementById('emotionalAwarenessFinal').textContent = feedback.breakdown.emotional_awareness.toFixed(2);
+
+                const medalsDiv = document.getElementById('medals');
+                medalsDiv.innerHTML = '';
+                feedback.medals.forEach(medal => {
+                    const medalSpan = document.createElement('span');
+                    medalSpan.className = 'medal';
+                    medalSpan.textContent = medal;
+                    medalsDiv.appendChild(medalSpan);
+                });
+
+                document.getElementById('objectivesCompleted').textContent = feedback.objectives_completed.join(', ');
+
+                feedbackDiv.style.display = 'block';
+                endSessionBtn.disabled = true;
+                stopStreamBtn.click(); // Stop stream
+            } catch (error) {
+                console.error('Error getting feedback:', error);
+            }
+        });
+    </script>
+</body>
+</html>
