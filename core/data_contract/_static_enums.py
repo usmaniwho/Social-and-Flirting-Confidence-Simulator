@@ -8,6 +8,11 @@ class Mode(StrEnum):
     SOCIAL = "social"
     ROMANTIC = "romantic"
 
+class Personality(StrEnum):
+    PLAYFUL = "playful"
+    CALM = "calm"
+    SHY = "shy"
+
 class Medal(StrEnum):
     FRIENDLINESS = "Friendliness"
     COMPOSURE = "Composure"

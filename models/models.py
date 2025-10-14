@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from typing import Optional, Dict, List
 from enum import StrEnum
-from core.data_contract import Mode
+from core.data_contract import Mode, Personality
 
 class CalibrationStep(BaseModel):
     step_id: str
@@ -19,6 +19,7 @@ class SessionCreate(BaseModel):
     user_id: str
     mode: Mode
     scenario: str
+    personality: Optional[Personality] = None
 
 class EmotionData(BaseModel):
     eye_contact: float
@@ -54,6 +55,7 @@ class SessionSummary(BaseModel):
     user_id: str
     mode: Mode
     scenario: str
+    personality: Optional[Personality] = None
     frs_result: FRSResult
     feedback: Optional[Dict[str, str]] = None
     objectives_completed: Optional[List[str]] = None

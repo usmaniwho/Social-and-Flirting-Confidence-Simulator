@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, HTTPException
 from models.models import SessionCreate, SessionSummary, FRSResult, ScenarioObjective, Mode
 from datetime import datetime
@@ -9,44 +8,62 @@ router = APIRouter()
 # Expanded scenario definitions with modes
 scenarios = {
     "social": {
-        "house_party": ScenarioObjective(
-            main="Join conversation naturally",
-            bonus=["Eye contact", "Smile", "Initiate contact"],
-            medal_conditions=["Friendliness", "Composure", "Adaptability"],
-            dynamic_objectives=["Make a new friend", "Build trust quickly"]
-        ),
-        "work_mixer": ScenarioObjective(
-            main="Navigate casual group dynamics",
-            bonus=["Listen first", "Contribute usefully", "Include others"],
-            medal_conditions=["Friendliness", "Awareness", "Composure"],
-            dynamic_objectives=["Get invited to an event", "Establish common ground"]
-        ),
-        "group_conversation": ScenarioObjective(
-            main="Participate effectively in group setting",
-            bonus=["Listen first", "Contribute usefully", "Include others"],
-            medal_conditions=["Friendliness", "Composure", "Awareness"],
-            dynamic_objectives=["Make a new friend", "Build trust quickly"]
-        )
+        "house_party": {
+            "objective": ScenarioObjective(
+                main="Join conversation naturally",
+                bonus=["Eye contact", "Smile", "Initiate contact"],
+                medal_conditions=["Friendliness", "Composure", "Adaptability"],
+                dynamic_objectives=["Make a new friend", "Build trust quickly"]
+            ),
+            "prompt": "You're at a house party and notice a group of people having an interesting conversation. You decide to join in."
+        },
+        "work_mixer": {
+            "objective": ScenarioObjective(
+                main="Navigate casual group dynamics",
+                bonus=["Listen first", "Contribute usefully", "Include others"],
+                medal_conditions=["Friendliness", "Awareness", "Composure"],
+                dynamic_objectives=["Get invited to an event", "Establish common ground"]
+            ),
+            "prompt": "You're at a work networking mixer and spot someone from another department you'd like to connect with."
+        },
+        "group_conversation": {
+            "objective": ScenarioObjective(
+                main="Participate effectively in group setting",
+                bonus=["Listen first", "Contribute usefully", "Include others"],
+                medal_conditions=["Friendliness", "Composure", "Awareness"],
+                dynamic_objectives=["Make a new friend", "Build trust quickly"]
+            ),
+            "prompt": "You're in a group conversation at a social gathering and want to contribute meaningfully."
+        }
     },
     "romantic": {
-        "bar_encounter": ScenarioObjective(
-            main="Start a conversation and keep it flowing",
-            bonus=["Make an observational joke", "Maintain eye contact", "Use subtle flattery"],
-            medal_conditions=["Charisma", "Friendliness", "Persuasion"],
-            dynamic_objectives=["Ask someone out", "Build attraction", "Escalate connection"]
-        ),
-        "first_date_jitters": ScenarioObjective(
-            main="Deepen conversation and build connection",
-            bonus=["Eye contact", "Share anecdotes", "Show reciprocity"],
-            medal_conditions=["Charisma", "Friendliness", "Composure", "Compassion"],
-            dynamic_objectives=["Build trust quickly", "Respond well to awkward silence"]
-        ),
-        "coffee_shop_approach": ScenarioObjective(
-            main="Break the ice and have meaningful interaction",
-            bonus=["Tease respectfully", "Listen actively", "Respond smoothly"],
-            medal_conditions=["Charisma", "Friendliness", "Awareness"],
-            dynamic_objectives=["Leave with verbal agreement to meet again", "Establish common ground"]
-        )
+        "bar_encounter": {
+            "objective": ScenarioObjective(
+                main="Start a conversation and keep it flowing",
+                bonus=["Make an observational joke", "Maintain eye contact", "Use subtle flattery"],
+                medal_conditions=["Charisma", "Friendliness", "Persuasion"],
+                dynamic_objectives=["Ask someone out", "Build attraction", "Escalate connection"]
+            ),
+            "prompt": "You're at a bar and see someone attractive across the room. You decide to approach them."
+        },
+        "first_date_jitters": {
+            "objective": ScenarioObjective(
+                main="Deepen conversation and build connection",
+                bonus=["Eye contact", "Share anecdotes", "Show reciprocity"],
+                medal_conditions=["Charisma", "Friendliness", "Composure", "Compassion"],
+                dynamic_objectives=["Build trust quickly", "Respond well to awkward silence"]
+            ),
+            "prompt": "You're on your first date and feeling a bit nervous. The conversation needs to flow naturally."
+        },
+        "coffee_shop_approach": {
+            "objective": ScenarioObjective(
+                main="Break the ice and have meaningful interaction",
+                bonus=["Tease respectfully", "Listen actively", "Respond smoothly"],
+                medal_conditions=["Charisma", "Friendliness", "Awareness"],
+                dynamic_objectives=["Leave with verbal agreement to meet again", "Establish common ground"]
+            ),
+            "prompt": "You're in a coffee shop and notice someone reading an interesting book. You want to start a conversation."
+        }
     }
 }
 
@@ -54,7 +71,9 @@ scenarios = {
 def start_session(payload: SessionCreate):
     session_id = str(uuid.uuid4())
     mode_scenarios = scenarios.get(payload.mode, {})
-    scenario_obj = mode_scenarios.get(payload.scenario, ScenarioObjective(main="", bonus=[], medal_conditions=[]))
+    scenario_data = mode_scenarios.get(payload.scenario, {"objective": ScenarioObjective(main="", bonus=[], medal_conditions=[]), "prompt": ""})
+    scenario_obj = scenario_data["objective"]
+    scenario_prompt = scenario_data["prompt"]
 
     # Store session in SQLite DB
     from core.session_store import session_store
@@ -62,7 +81,9 @@ def start_session(payload: SessionCreate):
         "user_id": payload.user_id,
         "mode": payload.mode,
         "scenario": payload.scenario,
+        "personality": payload.personality,
         "objectives": scenario_obj.dict(),
+        "prompt": scenario_prompt,
         "started_at": datetime.utcnow()
     })
 
@@ -71,7 +92,9 @@ def start_session(payload: SessionCreate):
         "started_at": datetime.utcnow(),
         "mode": payload.mode,
         "scenario": payload.scenario,
-        "objectives": scenario_obj
+        "personality": payload.personality,
+        "objectives": scenario_obj,
+        "prompt": scenario_prompt
     }
 
 @router.post("/summary", response_model=SessionSummary)
@@ -177,6 +200,7 @@ def end_session(session_id: str):
         'user_id': session['user_id'],
         'mode': session['mode'],
         'scenario': session['scenario'],
+        'personality': session.get('personality'),
         'frs_result': final_frs.dict(),
         'feedback': feedback,
         'objectives_completed': objectives_completed,
@@ -211,3 +235,62 @@ def get_scenarios(mode: str):
     """
     mode_scenarios = scenarios.get(mode, {})
     return {"scenarios": list(mode_scenarios.keys())}
+
+@router.get("/personalities")
+def get_personalities():
+    """
+    Get available AI personalities.
+    """
+    from core.data_contract import Personality
+    return {"personalities": [p.value for p in Personality]}
+
+from pydantic import BaseModel
+
+class UserMessage(BaseModel):
+    user_message: str
+
+@router.post("/ai_response/{session_id}")
+async def generate_ai_response(session_id: str, user_message: UserMessage):
+    """
+    Generate an AI response based on the session's personality, with voice synthesis.
+    """
+    from core.session_store import session_store
+    from ai_personality import GPTClient
+    from elevenlabs_client import ElevenLabsClient
+    from core.data_contract import Personality
+
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    personality = session.get('personality')
+    if not personality:
+        raise HTTPException(status_code=400, detail="No personality set for this session")
+
+    try:
+        gpt_client = GPTClient()
+        # Get conversation history from session store (assuming it's stored)
+        conversation_history = session.get('conversation_history', [])
+        response = await gpt_client.generate_response(user_message.user_message, Personality(personality), conversation_history)
+
+        # Update conversation history
+        conversation_history.append({"role": "user", "content": user_message.user_message})
+        conversation_history.append({"role": "assistant", "content": response})
+        session['conversation_history'] = conversation_history[-20:]  # Keep last 20 messages
+        session_store.save_session(session_id, session)
+
+        # Generate voice audio
+        elevenlabs_client = ElevenLabsClient()
+        audio_bytes = await elevenlabs_client.generate_speech(response, Personality(personality))
+
+        # Return response with audio (base64 encoded for frontend)
+        import base64
+        audio_b64 = base64.b64encode(audio_bytes).decode('utf-8') if audio_bytes else ""
+
+        return {
+            "response": response,
+            "personality": personality,
+            "audio": audio_b64
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate AI response: {str(e)}")

@@ -11,6 +11,7 @@ from datetime import datetime
 
 from api.routes.frs import router as frs_router
 from api.routes.session import router as session_router
+from api.routes.conversation import router as conversation_router
 from core.constant import Constant
 from core.data_contract import DocumentationSections
 from models.models import FRSResult, SessionSummary
@@ -28,6 +29,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Include routers with prefixes
 app.include_router(frs_router, prefix="/api", tags=["FRS"])
 app.include_router(session_router, prefix="/session", tags=["Session"])
+app.include_router(conversation_router, prefix="/api", tags=["Conversation"])
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,7 +78,8 @@ def get_feedback_screen(session_id: str):
             "medals": frs_result['medals'],
             "objectives_completed": summary['objectives_completed'],
             "feedback": summary['feedback'],
-            "stars_earned": summary['stars_earned']
+            "stars_earned": summary['stars_earned'],
+            "personality": summary.get('personality')
         }
 
     # If no summary, compute from accumulated FRS scores
@@ -151,4 +154,3 @@ async def serve_frontend():
     Serve the main frontend page.
     """
     return FileResponse("static/index.html")
-

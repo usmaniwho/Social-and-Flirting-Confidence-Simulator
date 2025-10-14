@@ -160,6 +160,47 @@
         .video-container {
             position: relative;
         }
+        .conversation-history {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #fafafa;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 10px;
+            max-width: 70%;
+        }
+        .message.user {
+            background-color: #007bff;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+        .message.ai {
+            background-color: #e9ecef;
+            color: #333;
+        }
+        .message.scenario {
+            background-color: #fff3cd;
+            color: #856404;
+            font-style: italic;
+        }
+        .gesture {
+            font-style: italic;
+            color: #666;
+            font-size: 0.9em;
+        }
+        .audio-controls {
+            margin-top: 10px;
+        }
+        .audio-controls audio {
+            width: 100%;
+        }
     </style>
 </head>
 <body>
@@ -218,6 +259,9 @@
             <h2>Scenario Selection</h2>
             <select id="scenarioSelect" disabled>
                 <option value="">Select a scenario...</option>
+            </select>
+            <select id="personalitySelect" disabled>
+                <option value="">Select AI personality...</option>
             </select>
             <button id="startSession" disabled>Start Session</button>
             <div id="sessionStatus" class="status" style="display: none;"></div>
@@ -279,17 +323,14 @@
         <div class="section">
             <h2>Scenario Simulation</h2>
             <div id="scenarioSimulation">
-                <div id="scenarioPrompt" style="display: none;">
-                    <p><strong>Scenario:</strong> <span id="scenarioText"></span></p>
-                    <p><strong>AI Response:</strong> <span id="aiResponse"></span></p>
-                    <div id="userResponseSection" style="display: none;">
-                        <textarea id="userResponse" placeholder="Type your response here..." rows="3" style="width: 100%; margin: 10px 0;"></textarea>
-                        <button id="submitResponse">Submit Response</button>
-                        <button id="recordResponse">Record Voice Response</button>
-                        <div id="recordingStatus" class="status" style="display: none;"></div>
-                    </div>
-                </div>
+                <div id="conversationHistory" class="conversation-history" style="display: none;"></div>
                 <div id="scenarioInactive">No active scenario</div>
+                <input type="text" id="userMessageInput" placeholder="Type your message..." style="padding: 10px; width: 60%; margin-right: 10px;" disabled />
+                <button id="sendMessage" disabled>Send</button>
+                <button id="voiceInputBtn" disabled>🎤 Speak</button>
+                <div class="audio-controls" id="audioControls" style="display: none;">
+                    <audio id="aiAudio" controls></audio>
+                </div>
             </div>
         </div>
 
@@ -303,20 +344,16 @@
                 <div class="stars" id="stars"></div>
                 <div class="metrics">
                     <div class="metric">
-                        <h3>Charisma & Friendliness</h3>
+                        <h3>Visual Confidence</h3>
                         <div class="value" id="charismaFriendliness"></div>
                     </div>
                     <div class="metric">
-                        <h3>Emotional Attunement & Empathy</h3>
-                        <div class="value" id="emotionalAttunementEmpathy"></div>
-                    </div>
-                    <div class="metric">
-                        <h3>Confidence & Self-Regulation</h3>
+                        <h3>Vocal Fluency</h3>
                         <div class="value" id="confidenceSelfregulation"></div>
                     </div>
                     <div class="metric">
-                        <h3>Listening & Reciprocal Dialogue</h3>
-                        <div class="value" id="listeningReciprocal"></div>
+                        <h3>Emotional Awareness</h3>
+                        <div class="value" id="emotionalAttunementEmpathy"></div>
                     </div>
                 </div>
                 <p><strong>Medals Earned:</strong></p>
@@ -354,14 +391,68 @@
         const endSessionBtn = document.getElementById('endSession');
         const getFeedbackBtn = document.getElementById('getFeedback');
         const feedbackDiv = document.getElementById('feedback');
-        const scenarioPromptDiv = document.getElementById('scenarioPrompt');
-        const scenarioTextSpan = document.getElementById('scenarioText');
-        const aiResponseSpan = document.getElementById('aiResponse');
-        const userResponseSection = document.getElementById('userResponseSection');
-        const userResponseTextarea = document.getElementById('userResponse');
-        const submitResponseBtn = document.getElementById('submitResponse');
-        const recordResponseBtn = document.getElementById('recordResponse');
-        const recordingStatus = document.getElementById('recordingStatus');
+        const sendMessageBtn = document.getElementById('sendMessage');
+        const voiceInputBtn = document.getElementById('voiceInputBtn');
+        const aiAudio = document.getElementById('aiAudio');
+        const audioControls = document.getElementById('audioControls');
+
+        let recognition = null;
+        let isListening = false;
+
+        // Initialize speech recognition
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+
+            recognition.onstart = () => {
+                isListening = true;
+                console.log('Voice recognition started');
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.trim();
+                if (transcript) {
+                    sendVoiceMessage(transcript);
+                }
+            };
+
+            recognition.onend = () => {
+                isListening = false;
+                console.log('Voice recognition ended');
+                // Restart listening if session is active and streaming
+                if (sessionId && isStreaming) {
+                    setTimeout(() => {
+                        if (recognition && !isListening) {
+                            recognition.start();
+                        }
+                    }, 500); // Small delay to prevent immediate restart
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                isListening = false;
+                // Restart on error if session active
+                if (sessionId && isStreaming) {
+                    setTimeout(() => {
+                        if (recognition && !isListening) {
+                            recognition.start();
+                        }
+                    }, 1000);
+                }
+            };
+        } else {
+            console.warn('Speech recognition not supported in this browser');
+        }
+
+        voiceInputBtn.addEventListener('click', () => {
+            if (recognition && !isListening) {
+                recognition.start();
+            }
+        });
 
         function updateStars(score) {
             const starsDiv = document.getElementById('stars');
@@ -379,11 +470,24 @@
         }
 
         function showScenarioPrompt(scenarioData) {
-            scenarioTextSpan.textContent = scenarioData.prompt;
-            aiResponseSpan.textContent = scenarioData.ai_response;
-            scenarioPromptDiv.style.display = 'block';
-            userResponseSection.style.display = 'block';
+            const historyDiv = document.getElementById('conversationHistory');
+            historyDiv.style.display = 'block';
             document.getElementById('scenarioInactive').style.display = 'none';
+
+            // Add scenario message
+            const scenarioMessage = document.createElement('div');
+            scenarioMessage.className = 'message scenario';
+            scenarioMessage.textContent = scenarioData.prompt;
+            historyDiv.appendChild(scenarioMessage);
+
+            // Add AI response message
+            const aiMessage = document.createElement('div');
+            aiMessage.className = 'message ai';
+            aiMessage.textContent = scenarioData.ai_response || scenarioData.ai_message;
+            historyDiv.appendChild(aiMessage);
+
+            // Scroll to bottom
+            historyDiv.scrollTop = historyDiv.scrollHeight;
         }
 
         function updateDecibelMeter(elementId = 'decibelFill') {
@@ -402,7 +506,10 @@
         }
 
         // Load modes and scenarios on page load
-        window.onload = loadModes;
+        window.onload = () => {
+            loadModes();
+            loadPersonalities();
+        };
 
         async function loadModes() {
             try {
@@ -417,6 +524,23 @@
                 });
             } catch (error) {
                 console.error('Error loading modes:', error);
+            }
+        }
+
+        async function loadPersonalities() {
+            try {
+                const response = await fetch('/session/personalities');
+                const data = await response.json();
+                personalitySelect.innerHTML = '<option value="">Select AI personality...</option>';
+                data.personalities.forEach(personality => {
+                    const option = document.createElement('option');
+                    option.value = personality;
+                    option.textContent = personality.charAt(0).toUpperCase() + personality.slice(1);
+                    personalitySelect.appendChild(option);
+                });
+                personalitySelect.disabled = false;
+            } catch (error) {
+                console.error('Error loading personalities:', error);
             }
         }
 
@@ -633,7 +757,8 @@
         startSessionBtn.addEventListener('click', async () => {
             const mode = modeSelect.value;
             const scenario = scenarioSelect.value;
-            if (!scenario || !mode) return;
+            const personality = personalitySelect.value;
+            if (!scenario || !mode || !personality) return;
 
             startSessionBtn.disabled = true;
             sessionStatus.style.display = 'block';
@@ -644,7 +769,7 @@
                 const response = await fetch('/session/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, mode: mode, scenario: scenario })
+                    body: JSON.stringify({ user_id: userId, mode: mode, scenario: scenario, personality: personality })
                 });
 
                 if (!response.ok) {
@@ -664,6 +789,8 @@
                 startStreamBtn.disabled = false;
                 endSessionBtn.disabled = false;
                 getFeedbackBtn.disabled = true; // Initially disabled until session is ended
+                sendMessageBtn.disabled = false; // Enable message sending
+                voiceInputBtn.disabled = false; // Enable voice input
             } catch (error) {
                 sessionStatus.className = 'status error';
                 sessionStatus.textContent = 'Failed to start session: ' + error.message;
@@ -691,13 +818,25 @@
                 stopStreamBtn.disabled = false;
                 streamStatus.style.display = 'block';
                 streamStatus.className = 'status success';
-                streamStatus.textContent = 'Webcam stream started. Real-time analysis active.';
+                streamStatus.textContent = 'Webcam stream started. Real-time analysis active. Conversation starting...';
+
+                // Disable manual inputs during streaming
+                document.getElementById('userMessageInput').disabled = true;
+                document.getElementById('sendMessage').disabled = true;
+                document.getElementById('voiceInputBtn').disabled = true;
 
                 // Start updating decibel meter
                 updateDecibelMeter();
 
                 // Connect to WebSocket for Hume AI streaming
                 connectWebSocket();
+
+                // Start continuous speech recognition for conversation
+                if (recognition) {
+                    recognition.start();
+                }
+
+                startAutoConversation();
             } catch (error) {
                 streamStatus.style.display = 'block';
                 streamStatus.className = 'status error';
@@ -714,6 +853,16 @@
             stopStreamBtn.disabled = true;
             streamStatus.className = 'status info';
             streamStatus.textContent = 'Stream stopped.';
+
+            // Stop speech recognition
+            if (recognition && isListening) {
+                recognition.stop();
+            }
+
+            // Re-enable manual inputs
+            document.getElementById('userMessageInput').disabled = false;
+            document.getElementById('sendMessage').disabled = false;
+            document.getElementById('voiceInputBtn').disabled = false;
 
             // Send stop message to WebSocket to halt server-side streaming
             if (window.currentWebSocket && window.currentWebSocket.readyState === WebSocket.OPEN) {
@@ -787,6 +936,88 @@
             window.currentWebSocket = ws;
         }
 
+        async function startAutoConversation() {
+            const historyDiv = document.getElementById('conversationHistory');
+            historyDiv.style.display = 'block';
+            document.getElementById('scenarioInactive').style.display = 'none';
+
+            const ws = window.currentWebSocket;
+            if (!ws) {
+                console.error("No WebSocket connection for emotion data.");
+                return;
+            }
+
+            let aiTalking = false;
+
+            recognition.onresult = async (event) => {
+                const transcript = event.results[0][0].transcript.trim();
+                if (transcript && !aiTalking) {
+                    // Display user message
+                    const userMessage = document.createElement('div');
+                    userMessage.className = 'message user';
+                    userMessage.textContent = transcript;
+                    historyDiv.appendChild(userMessage);
+                    historyDiv.scrollTop = historyDiv.scrollHeight;
+
+                    aiTalking = true;
+                    try {
+                        const aiResponse = await fetch('/api/conversation', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ user_id: userId, message: transcript, session_id: sessionId })
+                        });
+
+                        if (!aiResponse.ok) {
+                            throw new Error(`Conversation API failed: ${aiResponse.statusText}`);
+                        }
+
+                        const data = await aiResponse.json();
+
+                        // Add AI text message
+                        const aiMessage = document.createElement('div');
+                        aiMessage.className = 'message ai';
+                        aiMessage.textContent = data.reply;
+                        historyDiv.appendChild(aiMessage);
+                        historyDiv.scrollTop = historyDiv.scrollHeight;
+
+                        // Convert AI response to voice using ElevenLabs
+                        const audioResponse = await fetch('/api/voice', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: data.reply })
+                        });
+
+                        if (!audioResponse.ok) {
+                            throw new Error(`Voice API failed: ${audioResponse.statusText}`);
+                        }
+
+                        const audioBlob = await audioResponse.blob();
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        aiAudio.src = audioUrl;
+                        audioControls.style.display = 'block';
+                        aiAudio.play();
+
+                        aiAudio.onended = () => {
+                            aiTalking = false;
+                            // Resume listening once AI finishes speaking
+                            if (isStreaming && recognition && !isListening) {
+                                recognition.start();
+                            }
+                        };
+                    } catch (error) {
+                        console.error('Error in auto conversation:', error);
+                        aiTalking = false;
+                        // Add error message
+                        const errorMessage = document.createElement('div');
+                        errorMessage.className = 'message ai';
+                        errorMessage.textContent = 'Sorry, I encountered an error. Please try again.';
+                        historyDiv.appendChild(errorMessage);
+                        historyDiv.scrollTop = historyDiv.scrollHeight;
+                    }
+                }
+            };
+        }
+
         uploadVideoBtn.addEventListener('click', async () => {
             const file = videoFileInput.files[0];
             if (!file) {
@@ -823,7 +1054,6 @@
                 document.getElementById('charismaFriendliness').textContent = result.frs_result.charisma_friendliness.toFixed(2);
                 document.getElementById('emotionalAttunementEmpathy').textContent = result.frs_result.emotional_attunement_empathy.toFixed(2);
                 document.getElementById('confidenceSelfregulation').textContent = result.frs_result.confidence_selfregulation.toFixed(2);
-                document.getElementById('listeningReciprocal').textContent = result.frs_result.listening_reciprocal.toFixed(2);
 
                 const medalsDiv = document.getElementById('medals');
                 medalsDiv.innerHTML = '';
@@ -871,6 +1101,59 @@
             }
         });
 
+        sendMessageBtn.addEventListener('click', async () => {
+            const message = userMessageInput.value.trim();
+            if (!message || !sessionId) return;
+
+            // Clear input
+            userMessageInput.value = '';
+
+            // Add user message to history
+            addMessageToHistory(message, 'user');
+
+            try {
+                const response = await fetch(`/session/ai_response/${sessionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_message: message })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to get AI response: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Add AI response to history
+                addMessageToHistory(data.response, 'ai');
+
+                // Play audio if available
+                if (data.audio) {
+                    const audioSrc = `data:audio/wav;base64,${data.audio}`;
+                    aiAudio.src = audioSrc;
+                    audioControls.style.display = 'block';
+                    aiAudio.play();
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+                addMessageToHistory('Sorry, I encountered an error. Please try again.', 'ai');
+            }
+        });
+
+        function addMessageToHistory(message, type) {
+            const historyDiv = document.getElementById('conversationHistory');
+            historyDiv.style.display = 'block';
+            document.getElementById('scenarioInactive').style.display = 'none';
+
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = message;
+            historyDiv.appendChild(messageDiv);
+
+            // Scroll to bottom
+            historyDiv.scrollTop = historyDiv.scrollHeight;
+        }
+
         getFeedbackBtn.addEventListener('click', async () => {
             if (!sessionId) return;
 
@@ -886,7 +1169,6 @@
                 document.getElementById('charismaFriendliness').textContent = feedback.breakdown.charisma_friendliness.toFixed(2);
                 document.getElementById('emotionalAttunementEmpathy').textContent = feedback.breakdown.emotional_attunement_empathy.toFixed(2);
                 document.getElementById('confidenceSelfregulation').textContent = feedback.breakdown.confidence_selfregulation.toFixed(2);
-                document.getElementById('listeningReciprocal').textContent = feedback.breakdown.listening_reciprocal.toFixed(2);
 
                 const medalsDiv = document.getElementById('medals');
                 medalsDiv.innerHTML = '';

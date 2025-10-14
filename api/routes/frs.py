@@ -170,6 +170,36 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
             active_clients[session_id] = client
             await client.connect()
 
+        # Get session prompt and personality for AI conversation
+        from core.session_store import session_store
+        from ai_personality import GPTClient
+        from core.data_contract import Personality
+
+        session = session_store.get_session(session_id)
+        scenario_prompt = session.get('prompt', '') if session else ''
+        personality = session.get('personality') if session else None
+
+        gpt_client = None
+        if personality:
+            try:
+                gpt_client = GPTClient()
+            except ValueError as e:
+                print(f"GPT client initialization failed: {e}. Using default responses.")
+        conversation_history = []
+
+        # Send initial AI message based on scenario prompt
+        if scenario_prompt:
+            ai_response = "Hello! I'm excited to chat with you."  # Default fallback
+            if gpt_client and personality:
+                try:
+                    initial_message = f"Scenario: {scenario_prompt}. Start the conversation as the other person."
+                    ai_response = await gpt_client.generate_response(initial_message, Personality(personality))
+                    conversation_history.append({"role": "assistant", "content": ai_response})
+                except Exception as e:
+                    print(f"Error generating initial AI response for session {session_id}: {e}. Using default response.")
+            await websocket.send_json({"scenario": {"prompt": scenario_prompt, "ai_response": ai_response}})
+            print(f"Sent initial scenario prompt and AI message for session {session_id}: {scenario_prompt}, {ai_response}")
+
         # Callback to send emotion data to frontend
         async def send_to_frontend(emotion_data: Dict[str, Any]):
             if not is_streaming:
@@ -187,8 +217,6 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
                 # Calculate FRS in real-time
                 emotion_obj = EmotionData(**mapped_data)
                 # Get baseline from session store
-                from core.session_store import session_store
-                session = session_store.get_session(session_id)
                 baseline = None
                 if session:
                     user_id = session.get('user_id')
@@ -232,7 +260,7 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
         # Start simulation for testing as a cancellable task
         simulation_task = asyncio.create_task(simulate_emotion_data())
 
-        # Listen for stop message from frontend
+        # Listen for messages from frontend (user responses or stop signal)
         try:
             while is_streaming:
                 try:
@@ -248,6 +276,17 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
                                 print(f"Simulation task cancelled for session {session_id}")
                         await websocket.close()  # Close the WebSocket immediately
                         break
+                    elif "user_message" in data and gpt_client and personality:
+                        # Handle user message and generate AI response
+                        user_message = data["user_message"]
+                        conversation_history.append({"role": "user", "content": user_message})
+                        try:
+                            ai_response = await gpt_client.generate_response(user_message, Personality(personality), conversation_history)
+                            conversation_history.append({"role": "assistant", "content": ai_response})
+                            await websocket.send_json({"ai_message": ai_response, "type": "response"})
+                            print(f"Sent AI response for session {session_id}: {ai_response}")
+                        except Exception as e:
+                            print(f"Error generating AI response for session {session_id}: {e}")
                 except asyncio.TimeoutError:
                     # No message received, continue
                     pass
