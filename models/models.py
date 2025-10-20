@@ -15,6 +15,10 @@ class CalibrationData(BaseModel):
     steps_completed: List[str]
     baseline_emotions: Dict[str, float]
 
+class ConversationTranscript(BaseModel):
+    session_id: str
+    transcript: List[Dict[str, str]]  # List of {"role": "user" or "assistant", "content": text}
+
 class SessionCreate(BaseModel):
     user_id: str
     mode: Mode

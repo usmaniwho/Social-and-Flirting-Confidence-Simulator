@@ -162,13 +162,18 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
     is_streaming = True
 
     try:
+        # Hume AI integration disabled due to SDK compatibility issues
         # Initialize Hume client if API key is available
         api_key = os.getenv("HUME_API_KEY")
         client = None
-        if api_key:
-            client = HumeStreamClient(api_key=api_key)
-            active_clients[session_id] = client
-            await client.connect()
+        # if api_key:
+        #     try:
+        #         client = HumeStreamClient(api_key=api_key)
+        #         active_clients[session_id] = client
+        #         await client.connect()
+        #     except Exception as e:
+        #         print(f"Failed to initialize Hume client for session {session_id}: {e}")
+        #         client = None
 
         # Get session prompt and personality for AI conversation
         from core.session_store import session_store
@@ -318,11 +323,13 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
                 await simulation_task
             except asyncio.CancelledError:
                 print(f"Simulation task cancelled for session {session_id}")
+            except Exception as e:
+                print(f"Error cancelling simulation task for session {session_id}: {e}")
         if session_id in active_clients:
             try:
                 await active_clients[session_id].disconnect()
-            except:
-                pass
+            except Exception as e:
+                print(f"Error disconnecting Hume client for session {session_id}: {e}")
             del active_clients[session_id]
 
 @router.get("/streaming/status/{session_id}")

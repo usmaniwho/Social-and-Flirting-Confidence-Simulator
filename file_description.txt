@@ -1,98 +1,80 @@
-# File Descriptions and Code Flow
+# Social and Flirting Confidence Simulator - File Descriptions
 
-## Project Overview
-This is a Social and Flirting Confidence Simulator built with FastAPI, using Hume AI for emotion analysis to provide real-time feedback on social interaction skills through Flirting Response Score (FRS) computation.
+## Root Directory Files
 
-## File Structure and Descriptions
+### .gitignore
+Git ignore file that excludes common Python artifacts, virtual environments, logs, media files, and sensitive data like .env files from version control.
 
-### Root Level Files
-- `main.py`: FastAPI application entry point, sets up CORS, mounts static files, includes routers, and defines feedback endpoint
-- `requirements.txt`: Python dependencies with pinned versions
-- `README.md`: Project documentation and setup instructions
-- `TODO.md`: Development task tracking
-- `sessions.db`: SQLite database for session storage
-- `.env`: Environment variables (not in repo)
-- `.gitignore`: Git ignore patterns
+### elevenlabs_client.py
+Client wrapper for ElevenLabs API to generate voice synthesis based on AI personality types. Maps personalities (playful, calm, shy) to specific voice IDs and handles text-to-speech conversion with personality-specific voice settings.
 
-### API Layer (`api/`)
-- `api/routes/frs.py`: FRS (Flirting Response Score) endpoints for WebSocket streaming, calibration, baseline setup, and video upload
-- `api/routes/session.py`: Session management endpoints for creating, ending sessions, and retrieving scenarios/modes
+### file_description.txt
+This file - contains detailed descriptions of all project files, their purposes, and key components.
 
-### Core Logic (`core/`)
-- `core/__init__.py`: Core module initialization
-- `core/constant.py`: Application constants and configuration
-- `core/scoring.py`: FRS computation logic using emotion data and baselines
-- `core/session_store.py`: SQLite-based session and summary storage
-- `core/data_contract/__init__.py`: Data contract exports
-- `core/data_contract/_static_enums.py`: Enum definitions (Mode, DocumentationSections)
+### main.py
+Main FastAPI application entry point. Sets up the web server, includes API routers, configures CORS, serves static files, and provides endpoints for documentation and the frontend.
 
-### Models (`models/`)
-- `models/models.py`: Pydantic models for API requests/responses (FRSResult, SessionCreate, etc.)
+### README.md
+Project documentation including overview, features, installation instructions, API endpoints, project structure, and development guidelines.
 
-### Hume AI Integration (`hume_ai/`)
-- `hume_ai/hume_ai_client.py`: Hume AI WebSocket client for real-time emotion streaming
+### requirements.txt
+Python dependencies list including FastAPI, Hume AI SDK, OpenAI, ElevenLabs, Pydantic, and other required packages.
 
-### Static Files (`static/`)
-- `static/index.html`: Frontend interface
+### TODO.md
+Task list for ongoing development, including voice synthesis integration, AI dialogue enhancement, and frontend improvements.
 
-## Code Flow
+## ai_personality/ Module
 
-### Application Startup
-1. `main.py` initializes FastAPI app with CORS middleware
-2. Mounts static files directory for frontend serving
-3. Includes FRS and session routers with prefixes
-4. Sets up custom Swagger UI endpoint
+### ai_personality/__init__.py
+Module initialization file that exports the GPTClient class.
 
-### Session Creation Flow
-1. User calls `POST /session/start` with user_id, mode, scenario
-2. `session.py` validates mode/scenario against predefined scenarios
-3. Creates session in `session_store.py` (SQLite database)
-4. Returns session_id for subsequent operations
+### ai_personality/gpt_client.py
+GPT-4 client for generating AI personality-based responses. Includes personality-specific prompts, temperature settings, and conversation history management. Adds emotional gestures (e.g., *smiles*, *nods*) to responses based on personality for enhanced immersion.
 
-### FRS Calibration Flow
-1. User calls `POST /api/calibration/start` with session_id
-2. `frs.py` initializes calibration steps (reading lines, expressions, gestures)
-3. User completes calibration steps via WebSocket `/api/ws/{session_id}`
-4. `hume_ai_client.py` streams emotions from Hume AI
-5. `frs.py` accumulates emotion data and computes baseline
-6. Baseline stored in memory (production: use DB)
+## api/routes/ Module
 
-### Real-time FRS Streaming Flow
-1. User establishes WebSocket connection to `/api/ws/{session_id}`
-2. `frs.py` connects to Hume AI via `hume_ai_client.py`
-3. Audio/video stream processed by Hume AI for emotion detection
-4. Emotions converted to FRS scores using `scoring.py` with baseline adjustment
-5. FRS results sent back via WebSocket and accumulated in memory per session
+### api/routes/conversation.py
+API routes for handling conversation interactions. Processes user messages, generates AI responses using GPT client, and handles voice synthesis through ElevenLabs.
 
-### Session End Flow
-1. User calls `POST /session/end/{session_id}`
-2. `session.py` retrieves accumulated FRS scores from memory
-3. Computes final aggregated FRS (averages, medals, stars)
-4. Generates feedback based on performance thresholds
-5. Stores session summary in `session_store.py` database
-6. Returns final results and feedback
+### api/routes/frs.py
+Core FRS (Flirting Response Score) analysis routes. Handles calibration steps, real-time emotion streaming via WebSocket, baseline establishment, FRS computation, and video upload analysis.
 
-### Feedback Retrieval Flow
-1. User calls `GET /feedback/{session_id}`
-2. `main.py` retrieves session summary from `session_store.py`
-3. Extracts FRS results and generates feedback display data
-4. Returns formatted response for frontend (scores, medals, stars, feedback)
+### api/routes/session.py
+Session management routes. Creates and ends sessions, manages scenarios and objectives, handles AI response generation with voice synthesis, and provides mode/scenario/personality options.
 
-### Video Upload Flow (Bonus Feature)
-1. User uploads video via `POST /api/upload_video`
-2. `frs.py` saves file and simulates emotion aggregation
-3. Computes FRS using `scoring.py`
-4. Returns processed results
+## core/ Module
 
-## Data Flow Summary
-- **Input**: Audio/video streams, calibration data, session parameters
-- **Processing**: Hume AI emotion analysis → FRS computation → aggregation → storage
-- **Output**: Real-time FRS feedback, session summaries, performance metrics
-- **Storage**: SQLite for sessions/summaries, in-memory for active streaming data
+### core/__init__.py
+Empty module initialization file.
 
-## Key Components Interaction
-- **FastAPI**: HTTP/WebSocket routing and request handling
-- **Hume AI**: Real-time emotion detection from media streams
-- **Pydantic**: Data validation and serialization
-- **SQLite**: Persistent session data storage
-- **WebSockets**: Real-time bidirectional communication for streaming FRS
+### core/constant.py
+Application constants including version, name, and basic configuration values.
+
+### core/scoring.py
+FRS computation logic. Calculates Flirting Response Score from emotion data using weighted components (visual confidence, vocal fluency, emotional awareness) and determines medals/stars.
+
+### core/session_store.py
+SQLite database wrapper for persistent session storage. Manages session data, summaries, and user progress with proper schema migration.
+
+## core/data_contract/ Module
+
+### core/data_contract/__init__.py
+Module initialization that exports enums for modes, personalities, and medals.
+
+### core/data_contract/_static_enums.py
+Defines core enumerations: DocumentationSections, Mode (social/romantic), Personality (playful/calm/shy), and Medal types for achievements.
+
+## models/ Module
+
+### models/models.py
+Pydantic data models for API requests/responses including calibration data, emotion data, FRS results, session data, and scenario objectives.
+
+## hume_ai/ Module
+
+### hume_ai/hume_ai_client.py
+Client for Hume AI emotion analysis API. Handles WebSocket streaming for real-time facial and vocal emotion detection, mapping Hume predictions to application emotion metrics.
+
+## static/ Module
+
+### static/index.html
+Single-page HTML frontend with JavaScript for the web interface. Includes calibration workflow, session management, real-time video streaming, emotion metrics display, conversation simulation, and feedback presentation.

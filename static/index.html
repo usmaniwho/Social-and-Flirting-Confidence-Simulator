@@ -3,1191 +3,512 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Social & Flirting Confidence Simulator</title>
+    <title>Social and Flirting Confidence Simulator</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
+            padding: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
             background: white;
-            padding: 20px;
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            padding: 20px;
+            max-width: 800px;
+            width: 100%;
+            margin: 20px;
         }
-        h1 {
+        h1, h2 {
             text-align: center;
-            color: #333;
+            color: #4a5568;
         }
-        .section {
-            margin: 20px 0;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+        .screen {
+            display: none;
         }
-        .section h2 {
-            margin-top: 0;
-            color: #555;
+        .screen.active {
+            display: block;
         }
         button {
-            background-color: #4CAF50;
+            background: #667eea;
             color: white;
-            padding: 10px 20px;
             border: none;
+            padding: 10px 20px;
             border-radius: 5px;
             cursor: pointer;
             margin: 5px;
+            transition: background 0.3s;
         }
         button:hover {
-            background-color: #45a049;
+            background: #5a67d8;
         }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        .status {
-            padding: 10px;
-            margin: 10px 0;
+        .calibration-step {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #e2e8f0;
             border-radius: 5px;
-        }
-        .status.success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .status.error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .status.info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
         }
         .video-container {
             text-align: center;
             margin: 20px 0;
         }
         video {
-            border: 2px solid #ddd;
-            border-radius: 5px;
+            border-radius: 10px;
+            width: 100%;
+            max-width: 400px;
         }
-        .metrics {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 10px;
-            margin: 20px 0;
-        }
-        .metric {
-            background: #f8f9fa;
+        .chat {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
             padding: 10px;
-            border-radius: 5px;
-            text-align: center;
+            margin: 20px 0;
+            background: #f7fafc;
         }
-        .metric h3 {
-            margin: 0 0 5px 0;
-            color: #333;
-        }
-        .metric .value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #4CAF50;
-        }
-        .stars {
-            display: flex;
-            justify-content: center;
-            gap: 5px;
+        .message {
             margin: 10px 0;
         }
-        .star {
-            font-size: 24px;
-            color: #ddd;
+        .user { text-align: right; color: #667eea; }
+        .ai { text-align: left; color: #4a5568; }
+        .frs-display {
+            text-align: center;
+            margin: 20px 0;
         }
-        .star.filled {
-            color: gold;
+        .frs-bar {
+            width: 100%;
+            height: 20px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .frs-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #48bb78, #ed8936, #e53e3e);
+            transition: width 0.5s;
         }
         .feedback {
-            background: #e8f5e8;
-            padding: 15px;
-            border-radius: 5px;
             margin: 20px 0;
         }
         .medals {
             display: flex;
+            justify-content: center;
             flex-wrap: wrap;
-            gap: 10px;
         }
         .medal {
-            background: gold;
-            color: #333;
+            margin: 5px;
             padding: 5px 10px;
+            background: #ffd700;
             border-radius: 15px;
-            font-weight: bold;
-        }
-        .decibel-meter {
-            width: 100%;
-            height: 20px;
-            background-color: #ddd;
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-        .decibel-fill {
-            height: 100%;
-            background-color: #4CAF50;
-            width: 0%;
-            transition: width 0.1s;
-        }
-        .feedback-overlay {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            font-size: 24px;
-            font-weight: bold;
-            display: none;
-            z-index: 10;
-        }
-        .video-container {
-            position: relative;
-        }
-        .conversation-history {
-            max-height: 400px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 10px;
-            margin-bottom: 10px;
-            background-color: #fafafa;
-        }
-        .message {
-            margin: 10px 0;
-            padding: 10px;
-            border-radius: 10px;
-            max-width: 70%;
-        }
-        .message.user {
-            background-color: #007bff;
-            color: white;
-            margin-left: auto;
-            text-align: right;
-        }
-        .message.ai {
-            background-color: #e9ecef;
             color: #333;
-        }
-        .message.scenario {
-            background-color: #fff3cd;
-            color: #856404;
-            font-style: italic;
-        }
-        .gesture {
-            font-style: italic;
-            color: #666;
-            font-size: 0.9em;
-        }
-        .audio-controls {
-            margin-top: 10px;
-        }
-        .audio-controls audio {
-            width: 100%;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Social & Flirting Confidence Simulator</h1>
-
-        <div class="section">
-            <h2>Calibration Phase</h2>
-            <p>Before starting, we'll establish your baseline by reading aloud some lines and showing expressions.</p>
-            <button id="startCalibration">Start Calibration</button>
-            <div id="calibrationSteps" style="display: none;">
-                <div class="video-container">
-                    <video id="calibrationVideo" width="640" height="480" autoplay muted></video>
-                </div>
-                <div class="decibel-meter">
-                    <div class="decibel-fill" id="calibrationDecibelFill"></div>
-                </div>
-                <div id="currentStep"></div>
-                <div class="metrics">
-                    <div class="metric">
-                        <h3>Eye Contact</h3>
-                        <div class="value" id="calEyeContact">0.0</div>
-                    </div>
-                    <div class="metric">
-                        <h3>Smile</h3>
-                        <div class="value" id="calSmile">0.0</div>
-                    </div>
-                    <div class="metric">
-                        <h3>Vocal Fluency</h3>
-                        <div class="value" id="calVocalFluency">0.0</div>
-                    </div>
-                    <div class="metric">
-                        <h3>Emotional Awareness</h3>
-                        <div class="value" id="calEmotionalAwareness">0.0</div>
-                    </div>
-                    <div class="metric">
-                        <h3>FRS Score</h3>
-                        <div class="value" id="calFrsScore">0.0</div>
-                    </div>
-                </div>
-                <button id="nextStep" disabled>Next Step</button>
-                <div id="stepProgress">Step 0 of 11</div>
-            </div>
-            <div id="calibrationStatus" class="status" style="display: none;"></div>
+        <!-- Calibration Screen -->
+        <div id="calibration" class="screen active">
+            <h1>Initial Calibration</h1>
+            <p>Before starting, let's calibrate the system to your natural communication style.</p>
+            <div id="calibration-steps"></div>
+            <button id="next-calibration">Next Step</button>
+            <button id="complete-calibration" style="display: none;">Complete Calibration</button>
         </div>
 
-        <div class="section">
-            <h2>Mode Selection</h2>
-            <select id="modeSelect">
-                <option value="">Select a mode...</option>
-            </select>
-            <div id="modeStatus" class="status" style="display: none;"></div>
+        <!-- Mode Selection -->
+        <div id="mode-selection" class="screen">
+            <h1>Choose Your Mode</h1>
+            <button id="social-mode">Social Confidence Mode</button>
+            <button id="romantic-mode">Romantic Engagement Mode</button>
         </div>
 
-        <div class="section">
-            <h2>Scenario Selection</h2>
-            <select id="scenarioSelect" disabled>
-                <option value="">Select a scenario...</option>
-            </select>
-            <select id="personalitySelect" disabled>
-                <option value="">Select AI personality...</option>
-            </select>
-            <button id="startSession" disabled>Start Session</button>
-            <div id="sessionStatus" class="status" style="display: none;"></div>
+        <!-- Scenario Selection -->
+        <div id="scenario-selection" class="screen">
+            <h1 id="scenario-title">Select Scenario</h1>
+            <div id="scenarios"></div>
+            <button id="back-to-modes">Back</button>
         </div>
 
-        <div class="section">
-            <h2>Real-time Analysis</h2>
+        <!-- Roleplay Screen -->
+        <div id="roleplay" class="screen">
+            <h1 id="scenario-name">Scenario</h1>
             <div class="video-container">
-                <video id="video" width="640" height="480" autoplay muted></video>
-                <div class="feedback-overlay" id="feedbackOverlay"></div>
-            </div>
-            <div class="decibel-meter">
-                <div class="decibel-fill" id="decibelFill"></div>
-            </div>
-            <button id="startStream">Start Webcam Stream</button>
-            <button id="stopStream" disabled>Stop Stream</button>
-            <div id="streamStatus" class="status" style="display: none;"></div>
-        </div>
-
-        <div class="section">
-            <h2>Video Upload Analysis</h2>
-            <p>Upload a pre-recorded video for emotion analysis and FRS scoring.</p>
-            <input type="file" id="videoFile" accept="video/*" />
-            <button id="uploadVideo">Upload & Analyze Video</button>
-            <div id="uploadStatus" class="status" style="display: none;"></div>
-        </div>
-
-        <div class="section">
-            <h2>Live Metrics</h2>
-            <div class="metrics">
-                <div class="metric">
-                    <h3>Eye Contact</h3>
-                    <div class="value" id="eyeContact">0.0</div>
-                </div>
-                <div class="metric">
-                    <h3>Smile</h3>
-                    <div class="value" id="smile">0.0</div>
-                </div>
-                <div class="metric">
-                    <h3>Vocal Fluency</h3>
-                    <div class="value" id="vocalFluency">0.0</div>
-                </div>
-                <div class="metric">
-                    <h3>Emotional Awareness</h3>
-                    <div class="value" id="emotionalAwareness">0.0</div>
-                </div>
-                <div class="metric">
-                    <h3>FRS Score</h3>
-                    <div class="value" id="frsScore">0.0</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Session Objectives</h2>
-            <div id="objectives">No active session</div>
-        </div>
-
-        <div class="section">
-            <h2>Scenario Simulation</h2>
-            <div id="scenarioSimulation">
-                <div id="conversationHistory" class="conversation-history" style="display: none;"></div>
-                <div id="scenarioInactive">No active scenario</div>
-                <input type="text" id="userMessageInput" placeholder="Type your message..." style="padding: 10px; width: 60%; margin-right: 10px;" disabled />
-                <button id="sendMessage" disabled>Send</button>
-                <button id="voiceInputBtn" disabled>🎤 Speak</button>
-                <div class="audio-controls" id="audioControls" style="display: none;">
-                    <audio id="aiAudio" controls></audio>
-                </div>
-            </div>
-        </div>
-
-        <div class="section">
-            <h2>Feedback & Results</h2>
-            <button id="endSession" disabled>End Session</button>
-            <button id="getFeedback" disabled>Get Feedback</button>
-            <div id="feedback" class="feedback" style="display: none;">
-                <h3>Session Summary</h3>
-                <p><strong>Overall FRS Score:</strong> <span id="overallFrs"></span></p>
-                <div class="stars" id="stars"></div>
-                <div class="metrics">
-                    <div class="metric">
-                        <h3>Visual Confidence</h3>
-                        <div class="value" id="charismaFriendliness"></div>
-                    </div>
-                    <div class="metric">
-                        <h3>Vocal Fluency</h3>
-                        <div class="value" id="confidenceSelfregulation"></div>
-                    </div>
-                    <div class="metric">
-                        <h3>Emotional Awareness</h3>
-                        <div class="value" id="emotionalAttunementEmpathy"></div>
+                <video id="video" autoplay playsinline></video>
+                <div id="frs-display" class="frs-display">
+                    <h3>FRS Score: <span id="frs-score">0.0</span></h3>
+                    <div class="frs-bar">
+                        <div id="frs-fill" class="frs-fill" style="width: 0%;"></div>
                     </div>
                 </div>
-                <p><strong>Medals Earned:</strong></p>
-                <div class="medals" id="medals"></div>
-                <p><strong>Objectives Completed:</strong> <span id="objectivesCompleted"></span></p>
             </div>
+            <div id="objectives">Objectives: Loading...</div>
+            <div class="chat" id="chat"></div>
+            <input type="text" id="user-input" placeholder="Type your response..." style="width: 70%;">
+            <button id="send-message">Send</button>
+            <button id="end-session">End Session</button>
+        </div>
+
+        <!-- Feedback Screen -->
+        <div id="feedback" class="screen">
+            <h1>Session Feedback</h1>
+            <div class="feedback">
+                <h2>Overall FRS: <span id="overall-frs">0.0</span></h2>
+                <h3>Breakdown:</h3>
+                <p>Charisma/Friendliness: <span id="charisma">0.0</span></p>
+                <p>Emotional Attunement/Empathy: <span id="empathy">0.0</span></p>
+                <p>Confidence/Self-Regulation: <span id="confidence">0.0</span></p>
+                <p>Listening/Reciprocal: <span id="listening">0.0</span></p>
+                <h3>Medals Earned:</h3>
+                <div id="medals" class="medals"></div>
+                <h3>Objectives Completed:</h3>
+                <ul id="objectives-completed"></ul>
+                <p id="feedback-text"></p>
+                <p>Stars Earned: <span id="stars">0</span></p>
+                <h3>Conversation Transcript:</h3>
+                <div id="transcript" class="chat"></div>
+            </div>
+            <button id="restart">Start New Session</button>
         </div>
     </div>
 
     <script>
-        let userId = 'user_' + Date.now();
+        let currentScreen = 'calibration';
         let sessionId = null;
-        let baseline = null;
-        let stream = null;
-        let isStreaming = false;
-        let audioContext = null;
-        let analyser = null;
-        let microphone = null;
-        let dataArray = null;
+        let mode = null;
+        let scenario = null;
+        let personality = 'calm';
+        let calibrationSteps = [];
+        let currentStepIndex = 0;
+        let ws = null;
+        let voiceWs = null;
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let videoStream = null;
+        let recordingInterval = null;
+        let sessionEnded = false;
 
-        // DOM elements
-        const startCalibrationBtn = document.getElementById('startCalibration');
-        const calibrationStatus = document.getElementById('calibrationStatus');
-        const modeSelect = document.getElementById('modeSelect');
-        const modeStatus = document.getElementById('modeStatus');
-        const scenarioSelect = document.getElementById('scenarioSelect');
-        const startSessionBtn = document.getElementById('startSession');
-        const sessionStatus = document.getElementById('sessionStatus');
-        const startStreamBtn = document.getElementById('startStream');
-        const stopStreamBtn = document.getElementById('stopStream');
-        const streamStatus = document.getElementById('streamStatus');
-        const uploadVideoBtn = document.getElementById('uploadVideo');
-        const videoFileInput = document.getElementById('videoFile');
-        const uploadStatus = document.getElementById('uploadStatus');
-        const endSessionBtn = document.getElementById('endSession');
-        const getFeedbackBtn = document.getElementById('getFeedback');
-        const feedbackDiv = document.getElementById('feedback');
-        const sendMessageBtn = document.getElementById('sendMessage');
-        const voiceInputBtn = document.getElementById('voiceInputBtn');
-        const aiAudio = document.getElementById('aiAudio');
-        const audioControls = document.getElementById('audioControls');
-
-        let recognition = null;
-        let isListening = false;
-
-        // Initialize speech recognition
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            recognition.continuous = false;
-            recognition.interimResults = false;
-            recognition.lang = 'en-US';
-
-            recognition.onstart = () => {
-                isListening = true;
-                console.log('Voice recognition started');
-            };
-
-            recognition.onresult = (event) => {
-                const transcript = event.results[0][0].transcript.trim();
-                if (transcript) {
-                    sendVoiceMessage(transcript);
-                }
-            };
-
-            recognition.onend = () => {
-                isListening = false;
-                console.log('Voice recognition ended');
-                // Restart listening if session is active and streaming
-                if (sessionId && isStreaming) {
-                    setTimeout(() => {
-                        if (recognition && !isListening) {
-                            recognition.start();
-                        }
-                    }, 500); // Small delay to prevent immediate restart
-                }
-            };
-
-            recognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
-                isListening = false;
-                // Restart on error if session active
-                if (sessionId && isStreaming) {
-                    setTimeout(() => {
-                        if (recognition && !isListening) {
-                            recognition.start();
-                        }
-                    }, 1000);
-                }
-            };
-        } else {
-            console.warn('Speech recognition not supported in this browser');
-        }
-
-        voiceInputBtn.addEventListener('click', () => {
-            if (recognition && !isListening) {
-                recognition.start();
-            }
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCalibrationSteps();
+            setupEventListeners();
         });
 
-        function updateStars(score) {
-            const starsDiv = document.getElementById('stars');
-            starsDiv.innerHTML = '';
-            const starCount = Math.round(score / 2); // Assuming score out of 10, 5 stars max
-            for (let i = 0; i < 5; i++) {
-                const star = document.createElement('span');
-                star.className = 'star';
-                if (i < starCount) {
-                    star.classList.add('filled');
-                }
-                star.textContent = '★';
-                starsDiv.appendChild(star);
-            }
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(screen => screen.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+            currentScreen = screenId;
         }
 
-        function showScenarioPrompt(scenarioData) {
-            const historyDiv = document.getElementById('conversationHistory');
-            historyDiv.style.display = 'block';
-            document.getElementById('scenarioInactive').style.display = 'none';
-
-            // Add scenario message
-            const scenarioMessage = document.createElement('div');
-            scenarioMessage.className = 'message scenario';
-            scenarioMessage.textContent = scenarioData.prompt;
-            historyDiv.appendChild(scenarioMessage);
-
-            // Add AI response message
-            const aiMessage = document.createElement('div');
-            aiMessage.className = 'message ai';
-            aiMessage.textContent = scenarioData.ai_response || scenarioData.ai_message;
-            historyDiv.appendChild(aiMessage);
-
-            // Scroll to bottom
-            historyDiv.scrollTop = historyDiv.scrollHeight;
+        function setupEventListeners() {
+            document.getElementById('next-calibration').addEventListener('click', nextCalibrationStep);
+            document.getElementById('complete-calibration').addEventListener('click', completeCalibration);
+            document.getElementById('social-mode').addEventListener('click', () => selectMode('social'));
+            document.getElementById('romantic-mode').addEventListener('click', () => selectMode('romantic'));
+            document.getElementById('back-to-modes').addEventListener('click', () => showScreen('mode-selection'));
+            document.getElementById('send-message').addEventListener('click', sendMessage);
+            document.getElementById('end-session').addEventListener('click', endSession);
+            document.getElementById('restart').addEventListener('click', () => location.reload());
+            document.getElementById('user-input').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') sendMessage();
+            });
         }
 
-        function updateDecibelMeter(elementId = 'decibelFill') {
-            if ((!isStreaming && elementId === 'decibelFill') || !analyser) return;
-
-            analyser.getByteFrequencyData(dataArray);
-            let sum = 0;
-            for (let i = 0; i < dataArray.length; i++) {
-                sum += dataArray[i];
-            }
-            const average = sum / dataArray.length;
-            const decibelLevel = (average / 255) * 100; // Convert to percentage
-            document.getElementById(elementId).style.width = decibelLevel + '%';
-
-            requestAnimationFrame(() => updateDecibelMeter(elementId));
-        }
-
-        // Load modes and scenarios on page load
-        window.onload = () => {
-            loadModes();
-            loadPersonalities();
-        };
-
-        async function loadModes() {
+        async function loadCalibrationSteps() {
             try {
-                const response = await fetch('/session/modes');
+                const response = await fetch('/api/calibration/steps');
                 const data = await response.json();
-                modeSelect.innerHTML = '<option value="">Select a mode...</option>';
-                data.modes.forEach(mode => {
-                    const option = document.createElement('option');
-                    option.value = mode;
-                    option.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
-                    modeSelect.appendChild(option);
-                });
+                calibrationSteps = data.steps;
+                displayCalibrationStep();
             } catch (error) {
-                console.error('Error loading modes:', error);
+                console.error('Error loading calibration steps:', error);
             }
         }
 
-        async function loadPersonalities() {
-            try {
-                const response = await fetch('/session/personalities');
-                const data = await response.json();
-                personalitySelect.innerHTML = '<option value="">Select AI personality...</option>';
-                data.personalities.forEach(personality => {
-                    const option = document.createElement('option');
-                    option.value = personality;
-                    option.textContent = personality.charAt(0).toUpperCase() + personality.slice(1);
-                    personalitySelect.appendChild(option);
-                });
-                personalitySelect.disabled = false;
-            } catch (error) {
-                console.error('Error loading personalities:', error);
+        function displayCalibrationStep() {
+            const stepsContainer = document.getElementById('calibration-steps');
+            if (currentStepIndex < calibrationSteps.length) {
+                const step = calibrationSteps[currentStepIndex];
+                stepsContainer.innerHTML = `
+                    <div class="calibration-step">
+                        <h3>Step ${currentStepIndex + 1}: ${step.instruction}</h3>
+                        ${step.line_to_read ? `<p>Read aloud: "${step.line_to_read}"</p>` : ''}
+                        ${step.expression ? `<p>Show expression: ${step.expression}</p>` : ''}
+                        ${step.gesture ? `<p>Perform gesture: ${step.gesture}</p>` : ''}
+                    </div>
+                `;
+            } else {
+                stepsContainer.innerHTML = '<p>Calibration complete!</p>';
+                document.getElementById('next-calibration').style.display = 'none';
+                document.getElementById('complete-calibration').style.display = 'block';
             }
         }
 
-        modeSelect.addEventListener('change', async () => {
-            const mode = modeSelect.value;
-            if (!mode) {
-                scenarioSelect.disabled = true;
-                scenarioSelect.innerHTML = '<option value="">Select a scenario...</option>';
-                return;
-            }
+        function nextCalibrationStep() {
+            currentStepIndex++;
+            displayCalibrationStep();
+        }
 
+        async function completeCalibration() {
+            // Simulate calibration completion
+            showScreen('mode-selection');
+        }
+
+        function selectMode(selectedMode) {
+            mode = selectedMode;
+            document.getElementById('scenario-title').textContent = `${mode.charAt(0).toUpperCase() + mode.slice(1)} Scenarios`;
+            loadScenarios();
+            showScreen('scenario-selection');
+        }
+
+        async function loadScenarios() {
             try {
                 const response = await fetch(`/session/scenarios/${mode}`);
                 const data = await response.json();
-                scenarioSelect.innerHTML = '<option value="">Select a scenario...</option>';
-                data.scenarios.forEach(scenario => {
-                    const option = document.createElement('option');
-                    option.value = scenario;
-                    option.textContent = scenario.replace('_', ' ').toUpperCase();
-                    scenarioSelect.appendChild(option);
+                const scenariosContainer = document.getElementById('scenarios');
+                scenariosContainer.innerHTML = '';
+                data.scenarios.forEach(scen => {
+                    const button = document.createElement('button');
+                    button.textContent = scen.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                    button.addEventListener('click', () => selectScenario(scen));
+                    scenariosContainer.appendChild(button);
                 });
-                scenarioSelect.disabled = false;
             } catch (error) {
                 console.error('Error loading scenarios:', error);
-                modeStatus.style.display = 'block';
-                modeStatus.className = 'status error';
-                modeStatus.textContent = 'Failed to load scenarios for this mode.';
             }
-        });
+        }
 
-        startCalibrationBtn.addEventListener('click', async () => {
-            startCalibrationBtn.disabled = true;
-            calibrationStatus.style.display = 'block';
-            calibrationStatus.className = 'status info';
-            calibrationStatus.textContent = 'Starting calibration...';
-
-            try {
-                // Fetch calibration steps
-                const stepsResponse = await fetch('/api/calibration/steps');
-                const stepsData = await stepsResponse.json();
-                const steps = stepsData.steps;
-
-                // Show calibration steps UI
-                const calibrationStepsDiv = document.getElementById('calibrationSteps');
-                const currentStepDiv = document.getElementById('currentStep');
-                const nextStepBtn = document.getElementById('nextStep');
-                const stepProgressDiv = document.getElementById('stepProgress');
-
-                calibrationStepsDiv.style.display = 'block';
-                let currentStepIndex = 0;
-
-                function showStep(stepIndex) {
-                    const step = steps[stepIndex];
-                    currentStepDiv.innerHTML = `
-                        <p><strong>${step.instruction}</strong></p>
-                        ${step.line_to_read ? `<p>"${step.line_to_read}"</p>` : ''}
-                        ${step.expression ? `<p>Expression: ${step.expression}</p>` : ''}
-                        ${step.gesture ? `<p>Gesture: ${step.gesture}</p>` : ''}
-                    `;
-                    stepProgressDiv.textContent = `Step ${stepIndex + 1} of ${steps.length}`;
-                    nextStepBtn.disabled = false;
-                }
-
-                showStep(currentStepIndex);
-
-                let calibrationStream = null;
-
-                nextStepBtn.addEventListener('click', async () => {
-                    nextStepBtn.disabled = true;
-
-                    // Start camera for calibration if not already started
-                    if (!calibrationStream) {
-                        try {
-                            calibrationStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                            document.getElementById('calibrationVideo').srcObject = calibrationStream;
-
-                            // Set up audio analysis for decibel meter in calibration
-                            audioContext = new AudioContext();
-                            analyser = audioContext.createAnalyser();
-                            analyser.fftSize = 256;
-                            microphone = audioContext.createMediaStreamSource(calibrationStream);
-                            microphone.connect(analyser);
-                            dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-                            // Start updating decibel meter
-                            updateDecibelMeter('calibrationDecibelFill');
-                        } catch (error) {
-                            console.error('Failed to start calibration camera:', error);
-                        }
-                    }
-
-                    // Evaluate emotion data based on step type to ensure voice and camera evaluation
-                    const step = steps[currentStepIndex];
-                    let emotionData = {
-                        eye_contact: 0.5,
-                        smile: 0.5,
-                        vocal_tone: 0.5,
-                        pacing: 0.5,
-                        engagement: 0.5
-                    };
-
-                    // Adjust based on instruction
-                    if (step.instruction.includes("read aloud")) {
-                        emotionData.vocal_tone = 0.8;  // Higher vocal tone for speaking
-                        emotionData.pacing = 0.7;     // Good pacing for reading
-                    }
-                    if (step.instruction.includes("friendly tone")) {
-                        emotionData.vocal_tone = 0.9;  // Friendly vocal tone
-                        emotionData.engagement = 0.8;  // Higher engagement
-                    }
-                    if (step.instruction.includes("flirtatious tone")) {
-                        emotionData.vocal_tone = 0.85; // Flirtatious vocal tone
-                        emotionData.smile = 0.75;      // Slight smile
-                        emotionData.eye_contact = 0.8; // Good eye contact
-                    }
-                    if (step.instruction.includes("assertive tone")) {
-                        emotionData.vocal_tone = 0.9;  // Assertive vocal tone
-                        emotionData.engagement = 0.85; // High engagement
-                    }
-
-                    // Adjust based on expression
-                    if (step.expression === "smiling") {
-                        emotionData.smile = 0.9;       // Strong smile
-                        emotionData.eye_contact = 0.8; // Good eye contact with smile
-                    }
-                    if (step.expression === "curiosity") {
-                        emotionData.eye_contact = 0.85; // Curious eye contact
-                        emotionData.engagement = 0.8;   // Engaged
-                    }
-                    if (step.expression === "playful") {
-                        emotionData.smile = 0.8;       // Playful smile
-                        emotionData.engagement = 0.75; // Playful engagement
-                    }
-                    if (step.expression === "sincere_interest") {
-                        emotionData.eye_contact = 0.9; // Strong eye contact
-                        emotionData.engagement = 0.9;  // High engagement
-                    }
-
-                    // Adjust based on gesture
-                    if (step.gesture === "lean_in") {
-                        emotionData.engagement = 0.9;  // Leaning in shows engagement
-                        emotionData.eye_contact = 0.8; // Eye contact while leaning
-                    }
-                    if (step.gesture === "shrug") {
-                        emotionData.engagement = 0.7;  // Casual engagement
-                    }
-                    if (step.gesture === "nod") {
-                        emotionData.eye_contact = 0.8; // Eye contact with nod
-                        emotionData.engagement = 0.8;  // Agreeable engagement
-                    }
-
-                    // Update calibration metrics display
-                    document.getElementById('calEyeContact').textContent = emotionData.eye_contact.toFixed(2);
-                    document.getElementById('calSmile').textContent = emotionData.smile.toFixed(2);
-                    document.getElementById('calVocalFluency').textContent = emotionData.vocal_tone.toFixed(2);
-                    document.getElementById('calEmotionalAwareness').textContent = emotionData.engagement.toFixed(2);
-
-                    // Calculate and display FRS score for calibration
-                    const visual_confidence = (emotionData.eye_contact + emotionData.smile) / 2.0;
-                    const vocal_fluency = (emotionData.vocal_tone + emotionData.pacing) / 2.0;
-                    const emotional_awareness = emotionData.engagement;
-                    const calFrsScore = (visual_confidence * 0.35 + vocal_fluency * 0.40 + emotional_awareness * 0.25) * 10;
-                    document.getElementById('calFrsScore').textContent = calFrsScore.toFixed(1);
-
-                    try {
-                        // Send step data to backend
-                        const stepResponse = await fetch(`/api/calibrate/step?user_id=${userId}&step_id=${steps[currentStepIndex].step_id}`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(emotionData)
-                        });
-
-                        if (!stepResponse.ok) {
-                            throw new Error(`Step calibration failed: ${stepResponse.statusText}`);
-                        }
-
-                        currentStepIndex++;
-                        if (currentStepIndex < steps.length) {
-                            showStep(currentStepIndex);
-                        } else {
-                            // Complete calibration
-                            const completeResponse = await fetch(`/api/calibrate/complete?user_id=${userId}`, {
-                                method: 'POST'
-                            });
-
-                            const result = await completeResponse.json();
-                            baseline = result.baseline;
-
-                            // Stop calibration stream
-                            if (calibrationStream) {
-                                calibrationStream.getTracks().forEach(track => track.stop());
-                            }
-
-                            calibrationStatus.className = 'status success';
-                            calibrationStatus.textContent = 'Calibration complete! Baseline established.';
-                            calibrationStepsDiv.style.display = 'none';
-                            startSessionBtn.disabled = false;
-                        }
-                    } catch (error) {
-                        calibrationStatus.className = 'status error';
-                        calibrationStatus.textContent = 'Calibration failed: ' + error.message;
-                        calibrationStepsDiv.style.display = 'none';
-                        startCalibrationBtn.disabled = false;
-                    }
-                });
-
-            } catch (error) {
-                calibrationStatus.className = 'status error';
-                calibrationStatus.textContent = 'Calibration failed: ' + error.message;
-                startCalibrationBtn.disabled = false;
-            }
-        });
-
-        startSessionBtn.addEventListener('click', async () => {
-            const mode = modeSelect.value;
-            const scenario = scenarioSelect.value;
-            const personality = personalitySelect.value;
-            if (!scenario || !mode || !personality) return;
-
-            startSessionBtn.disabled = true;
-            sessionStatus.style.display = 'block';
-            sessionStatus.className = 'status info';
-            sessionStatus.textContent = 'Starting session...';
-
+        async function selectScenario(selectedScenario) {
+            scenario = selectedScenario;
             try {
                 const response = await fetch('/session/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, mode: mode, scenario: scenario, personality: personality })
+                    body: JSON.stringify({
+                        user_id: 'user_' + Date.now(),
+                        mode: mode,
+                        scenario: scenario,
+                        personality: personality
+                    })
                 });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                const result = await response.json();
-                sessionId = result.session_id;
-
-                sessionStatus.className = 'status success';
-                sessionStatus.textContent = `Session started! Main objective: ${result.objectives.main}`;
-                document.getElementById('objectives').innerHTML = `
-                    <strong>Main:</strong> ${result.objectives.main}<br>
-                    <strong>Bonus:</strong> ${result.objectives.bonus.join(', ')}<br>
-                    <strong>Medal Conditions:</strong> ${result.objectives.medal_conditions.join(', ')}
-                `;
-                startStreamBtn.disabled = false;
-                endSessionBtn.disabled = false;
-                getFeedbackBtn.disabled = true; // Initially disabled until session is ended
-                sendMessageBtn.disabled = false; // Enable message sending
-                voiceInputBtn.disabled = false; // Enable voice input
+                const data = await response.json();
+                sessionId = data.session_id;
+                document.getElementById('scenario-name').textContent = scenario.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+                document.getElementById('objectives').textContent = `Objectives: ${data.objectives.main}`;
+                showScreen('roleplay');
+                startVideo();
+                startStreaming();
             } catch (error) {
-                sessionStatus.className = 'status error';
-                sessionStatus.textContent = 'Failed to start session: ' + error.message;
-                startSessionBtn.disabled = false;
+                console.error('Error starting session:', error);
             }
-        });
-
-
-
-        startStreamBtn.addEventListener('click', async () => {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                document.getElementById('video').srcObject = stream;
-                isStreaming = true;
-
-                // Set up audio analysis for decibel meter
-                audioContext = new AudioContext();
-                analyser = audioContext.createAnalyser();
-                analyser.fftSize = 256;
-                microphone = audioContext.createMediaStreamSource(stream);
-                microphone.connect(analyser);
-                dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-                startStreamBtn.disabled = true;
-                stopStreamBtn.disabled = false;
-                streamStatus.style.display = 'block';
-                streamStatus.className = 'status success';
-                streamStatus.textContent = 'Webcam stream started. Real-time analysis active. Conversation starting...';
-
-                // Disable manual inputs during streaming
-                document.getElementById('userMessageInput').disabled = true;
-                document.getElementById('sendMessage').disabled = true;
-                document.getElementById('voiceInputBtn').disabled = true;
-
-                // Start updating decibel meter
-                updateDecibelMeter();
-
-                // Connect to WebSocket for Hume AI streaming
-                connectWebSocket();
-
-                // Start continuous speech recognition for conversation
-                if (recognition) {
-                    recognition.start();
-                }
-
-                startAutoConversation();
-            } catch (error) {
-                streamStatus.style.display = 'block';
-                streamStatus.className = 'status error';
-                streamStatus.textContent = 'Failed to start webcam: ' + error.message;
-            }
-        });
-
-        stopStreamBtn.addEventListener('click', () => {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                isStreaming = false;
-            }
-            startStreamBtn.disabled = false;
-            stopStreamBtn.disabled = true;
-            streamStatus.className = 'status info';
-            streamStatus.textContent = 'Stream stopped.';
-
-            // Stop speech recognition
-            if (recognition && isListening) {
-                recognition.stop();
-            }
-
-            // Re-enable manual inputs
-            document.getElementById('userMessageInput').disabled = false;
-            document.getElementById('sendMessage').disabled = false;
-            document.getElementById('voiceInputBtn').disabled = false;
-
-            // Send stop message to WebSocket to halt server-side streaming
-            if (window.currentWebSocket && window.currentWebSocket.readyState === WebSocket.OPEN) {
-                window.currentWebSocket.send(JSON.stringify({ action: 'stop' }));
-            }
-        });
-
-        function connectWebSocket() {
-            const wsUrl = `ws://127.0.0.1:8000/api/stream/${sessionId}`;
-            const ws = new WebSocket(wsUrl);
-
-            ws.onopen = () => {
-                console.log('WebSocket connected');
-                streamStatus.textContent = 'Webcam stream started. Hume AI analysis active.';
-            };
-
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    console.log('Received WebSocket data:', data);
-
-                    if (data.error) {
-                        console.error('WebSocket error:', data.error);
-                        streamStatus.className = 'status error';
-                        streamStatus.textContent = 'Analysis error: ' + data.error;
-                        return;
-                    }
-
-                    // Only update metrics if still streaming
-                    if (isStreaming) {
-                        // Update emotion metrics
-                        if (data.emotions) {
-                            console.log('Updating UI with emotions:', data.emotions);
-                            document.getElementById('eyeContact').textContent = data.emotions.eye_contact.toFixed(2);
-                            document.getElementById('smile').textContent = data.emotions.smile.toFixed(2);
-                            document.getElementById('vocalFluency').textContent = data.emotions.vocal_tone.toFixed(2);  // Fixed: was vocal_fluency, should be vocal_tone
-                            document.getElementById('emotionalAwareness').textContent = data.emotions.engagement.toFixed(2);  // Fixed: was emotional_awareness, should be engagement
-                        }
-
-                        // Update FRS score
-                        if (data.frs) {
-                            console.log('Updating FRS score:', data.frs.frs_score);
-                            document.getElementById('frsScore').textContent = data.frs.frs_score.toFixed(1);
-                        }
-
-                        // Handle scenario prompts
-                        if (data.scenario) {
-                            showScenarioPrompt(data.scenario);
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
-                }
-            };
-
-            ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                streamStatus.className = 'status error';
-                streamStatus.textContent = 'Connection error. Check Hume API key.';
-            };
-
-            ws.onclose = (event) => {
-                console.log('WebSocket closed, code:', event.code, 'reason:', event.reason);
-                if (isStreaming) {
-                    streamStatus.className = 'status info';
-                    streamStatus.textContent = 'Analysis stopped.';
-                }
-            };
-
-            // Store WebSocket reference for cleanup
-            window.currentWebSocket = ws;
         }
 
-        async function startAutoConversation() {
-            const historyDiv = document.getElementById('conversationHistory');
-            historyDiv.style.display = 'block';
-            document.getElementById('scenarioInactive').style.display = 'none';
-
-            const ws = window.currentWebSocket;
-            if (!ws) {
-                console.error("No WebSocket connection for emotion data.");
-                return;
+        async function startVideo() {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('video').srcObject = videoStream;
+            } catch (error) {
+                console.error('Error accessing camera:', error);
             }
+        }
 
-            let aiTalking = false;
-
-            recognition.onresult = async (event) => {
-                const transcript = event.results[0][0].transcript.trim();
-                if (transcript && !aiTalking) {
-                    // Display user message
-                    const userMessage = document.createElement('div');
-                    userMessage.className = 'message user';
-                    userMessage.textContent = transcript;
-                    historyDiv.appendChild(userMessage);
-                    historyDiv.scrollTop = historyDiv.scrollHeight;
-
-                    aiTalking = true;
-                    try {
-                        const aiResponse = await fetch('/api/conversation', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ user_id: userId, message: transcript, session_id: sessionId })
-                        });
-
-                        if (!aiResponse.ok) {
-                            throw new Error(`Conversation API failed: ${aiResponse.statusText}`);
+        async function startStreaming() {
+            try {
+                ws = new WebSocket(`ws://127.0.0.1:8000/api/stream/${sessionId}`);
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.frs) {
+                        updateFRS(data.frs);
+                    }
+                    if (data.ai_message) {
+                        addMessage('ai', data.ai_message);
+                        if (data.audio) {
+                            playAudio(data.audio);
                         }
+                    }
+                };
+                // Start voice call automatically
+                startVoiceCall();
+            } catch (error) {
+                console.error('Error starting streaming:', error);
+            }
+        }
 
-                        const data = await aiResponse.json();
+        function updateFRS(frs) {
+            document.getElementById('frs-score').textContent = frs.frs_score.toFixed(1);
+            document.getElementById('frs-fill').style.width = `${(frs.frs_score / 10) * 100}%`;
+        }
 
-                        // Add AI text message
-                        const aiMessage = document.createElement('div');
-                        aiMessage.className = 'message ai';
-                        aiMessage.textContent = data.reply;
-                        historyDiv.appendChild(aiMessage);
-                        historyDiv.scrollTop = historyDiv.scrollHeight;
+        function addMessage(sender, text) {
+            const chat = document.getElementById('chat');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            messageDiv.textContent = text;
+            chat.appendChild(messageDiv);
+            chat.scrollTop = chat.scrollHeight;
+        }
 
-                        // Convert AI response to voice using ElevenLabs
-                        const audioResponse = await fetch('/api/voice', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ text: data.reply })
-                        });
+        async function sendMessage() {
+            const input = document.getElementById('user-input');
+            const text = input.value.trim();
+            if (text) {
+                addMessage('user', text);
+                input.value = '';
+                if (ws) {
+                    ws.send(JSON.stringify({ user_message: text }));
+                }
+            }
+        }
 
-                        if (!audioResponse.ok) {
-                            throw new Error(`Voice API failed: ${audioResponse.statusText}`);
-                        }
-
-                        const audioBlob = await audioResponse.blob();
-                        const audioUrl = URL.createObjectURL(audioBlob);
-                        aiAudio.src = audioUrl;
-                        audioControls.style.display = 'block';
-                        aiAudio.play();
-
-                        aiAudio.onended = () => {
-                            aiTalking = false;
-                            // Resume listening once AI finishes speaking
-                            if (isStreaming && recognition && !isListening) {
-                                recognition.start();
+        async function startVoiceCall() {
+            try {
+                voiceWs = new WebSocket(`ws://127.0.0.1:8000/realtime/voice-stream`);
+                voiceWs.onopen = () => {
+                    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                        mediaRecorder = new MediaRecorder(stream);
+                        mediaRecorder.ondataavailable = (event) => {
+                            audioChunks.push(event.data);
+                        };
+                        mediaRecorder.onstop = () => {
+                            if (!sessionEnded) {
+                                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                                audioChunks = [];
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                    const base64Audio = reader.result.split(',')[1];
+                                    voiceWs.send(JSON.stringify({
+                                        session_id: sessionId,
+                                        audio: base64Audio,
+                                        transcript: document.getElementById('user-input').value
+                                    }));
+                                };
+                                reader.readAsDataURL(audioBlob);
                             }
                         };
-                    } catch (error) {
-                        console.error('Error in auto conversation:', error);
-                        aiTalking = false;
-                        // Add error message
-                        const errorMessage = document.createElement('div');
-                        errorMessage.className = 'message ai';
-                        errorMessage.textContent = 'Sorry, I encountered an error. Please try again.';
-                        historyDiv.appendChild(errorMessage);
-                        historyDiv.scrollTop = historyDiv.scrollHeight;
+                        mediaRecorder.start();
+                        recordingInterval = setInterval(() => {
+                            mediaRecorder.stop();
+                            mediaRecorder.start();
+                        }, 2000); // Send audio chunks every 2 seconds
+                    });
+                };
+                voiceWs.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.response) {
+                        addMessage('ai', data.response);
+                        if (data.audio) {
+                            playAudio(data.audio);
+                        }
                     }
-                }
-            };
+                    if (data.frs_update) {
+                        updateFRS(data.frs_update);
+                    }
+                };
+            } catch (error) {
+                console.error('Error starting voice call:', error);
+            }
         }
 
-        uploadVideoBtn.addEventListener('click', async () => {
-            const file = videoFileInput.files[0];
-            if (!file) {
-                uploadStatus.style.display = 'block';
-                uploadStatus.className = 'status error';
-                uploadStatus.textContent = 'Please select a video file first.';
+        function playAudio(base64Audio) {
+            const audio = new Audio(`data:audio/wav;base64,${base64Audio}`);
+            audio.play();
+        }
+
+        async function endSession() {
+            console.log('🔚 Ending session:', sessionId);
+
+            if (!sessionId) {
+                alert('No active session found.');
                 return;
             }
 
-            uploadVideoBtn.disabled = true;
-            uploadStatus.style.display = 'block';
-            uploadStatus.className = 'status info';
-            uploadStatus.textContent = 'Uploading and analyzing video...';
-
-            try {
-                const formData = new FormData();
-                formData.append('file', file);
-
-                const response = await fetch(`/api/upload_video?user_id=${userId}`, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Upload failed: ${response.statusText}`);
-                }
-
-                const result = await response.json();
-                console.log('Video analysis result:', result);
-
-                // Display results in feedback section
-                document.getElementById('overallFrs').textContent = result.frs_result.frs_score.toFixed(1);
-                updateStars(result.frs_result.frs_score);
-                document.getElementById('charismaFriendliness').textContent = result.frs_result.charisma_friendliness.toFixed(2);
-                document.getElementById('emotionalAttunementEmpathy').textContent = result.frs_result.emotional_attunement_empathy.toFixed(2);
-                document.getElementById('confidenceSelfregulation').textContent = result.frs_result.confidence_selfregulation.toFixed(2);
-
-                const medalsDiv = document.getElementById('medals');
-                medalsDiv.innerHTML = '';
-                result.frs_result.medals.forEach(medal => {
-                    const medalSpan = document.createElement('span');
-                    medalSpan.className = 'medal';
-                    medalSpan.textContent = medal;
-                    medalsDiv.appendChild(medalSpan);
-                });
-
-                document.getElementById('objectivesCompleted').textContent = 'Video analysis completed';
-
-                feedbackDiv.style.display = 'block';
-                uploadStatus.className = 'status success';
-                uploadStatus.textContent = 'Video analysis complete! Results displayed below.';
-            } catch (error) {
-                uploadStatus.className = 'status error';
-                uploadStatus.textContent = 'Upload failed: ' + error.message;
-                console.error('Video upload error:', error);
-            } finally {
-                uploadVideoBtn.disabled = false;
+            // Stop any ongoing recordings
+            if (recordingInterval) {
+                clearInterval(recordingInterval);
+                recordingInterval = null;
             }
-        });
 
-        endSessionBtn.addEventListener('click', async () => {
-            if (!sessionId) return;
-
-            try {
-                // End the session
-                const endResponse = await fetch(`/session/end/${sessionId}`, {
-                    method: 'POST'
-                });
-                if (!endResponse.ok) {
-                    throw new Error(`Failed to end session: ${endResponse.statusText}`);
+            if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                try {
+                    mediaRecorder.stop();
+                } catch (e) {
+                    console.warn("MediaRecorder stop failed:", e);
                 }
-
-                sessionStatus.className = 'status success';
-                sessionStatus.textContent = 'Session ended successfully. You can now get your feedback.';
-                endSessionBtn.disabled = true;
-                getFeedbackBtn.disabled = false;
-                stopStreamBtn.click(); // Stop stream
-            } catch (error) {
-                console.error('Error ending session:', error);
-                alert('Failed to end session: ' + error.message);
             }
-        });
 
-        sendMessageBtn.addEventListener('click', async () => {
-            const message = userMessageInput.value.trim();
-            if (!message || !sessionId) return;
-
-            // Clear input
-            userMessageInput.value = '';
-
-            // Add user message to history
-            addMessageToHistory(message, 'user');
+            // Stop camera and mic
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
 
             try {
-                const response = await fetch(`/session/ai_response/${sessionId}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_message: message })
-                });
+                console.log('📡 Fetching feedback from /session/end/' + sessionId);
+                const response = await fetch(`/session/end/${sessionId}`, { method: 'POST' });
 
-                if (!response.ok) {
-                    throw new Error(`Failed to get AI response: ${response.statusText}`);
-                }
+                if (!response.ok) throw new Error(`HTTP error ${response.status}`);
 
                 const data = await response.json();
+                console.log('✅ Session end data:', data);
 
-                // Add AI response to history
-                addMessageToHistory(data.response, 'ai');
-
-                // Play audio if available
-                if (data.audio) {
-                    const audioSrc = `data:audio/wav;base64,${data.audio}`;
-                    aiAudio.src = audioSrc;
-                    audioControls.style.display = 'block';
-                    aiAudio.play();
+                // Close WebSocket connections before fetching session end to prevent further data sending
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.close(1000, "Session ended by user");
                 }
+                if (voiceWs && voiceWs.readyState === WebSocket.OPEN) {
+                    voiceWs.close(1000, "Session ended by user");
+                }
+
+                displayFeedback(data);
+                showScreen('feedback');
             } catch (error) {
-                console.error('Error sending message:', error);
-                addMessageToHistory('Sorry, I encountered an error. Please try again.', 'ai');
+                console.error('❌ Error ending session:', error);
+                alert('Failed to retrieve session summary. Showing partial results if any.');
+                showScreen('feedback');
             }
-        });
-
-        function addMessageToHistory(message, type) {
-            const historyDiv = document.getElementById('conversationHistory');
-            historyDiv.style.display = 'block';
-            document.getElementById('scenarioInactive').style.display = 'none';
-
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${type}`;
-            messageDiv.textContent = message;
-            historyDiv.appendChild(messageDiv);
-
-            // Scroll to bottom
-            historyDiv.scrollTop = historyDiv.scrollHeight;
         }
 
-        getFeedbackBtn.addEventListener('click', async () => {
-            if (!sessionId) return;
+        function displayFeedback(data) {
+            document.getElementById('overall-frs').textContent = data.final_frs.frs_score.toFixed(1);
+            document.getElementById('charisma').textContent = data.final_frs.charisma_friendliness.toFixed(2);
+            document.getElementById('empathy').textContent = data.final_frs.emotional_attunement_empathy.toFixed(2);
+            document.getElementById('confidence').textContent = data.final_frs.confidence_selfregulation.toFixed(2);
+            document.getElementById('listening').textContent = data.final_frs.listening_reciprocal.toFixed(2);
+            document.getElementById('stars').textContent = data.stars_earned;
+            document.getElementById('feedback-text').textContent = data.feedback.overall || 'No feedback available';
 
-            try {
-                const response = await fetch(`/feedback/${sessionId}`);
-                if (!response.ok) {
-                    throw new Error(`Failed to get feedback: ${response.statusText}`);
-                }
-                const feedback = await response.json();
+            const medalsContainer = document.getElementById('medals');
+            medalsContainer.innerHTML = '';
+            data.final_frs.medals.forEach(medal => {
+                const medalDiv = document.createElement('div');
+                medalDiv.className = 'medal';
+                medalDiv.textContent = medal;
+                medalsContainer.appendChild(medalDiv);
+            });
 
-                document.getElementById('overallFrs').textContent = feedback.overall_frs;
-                updateStars(feedback.overall_frs);
-                document.getElementById('charismaFriendliness').textContent = feedback.breakdown.charisma_friendliness.toFixed(2);
-                document.getElementById('emotionalAttunementEmpathy').textContent = feedback.breakdown.emotional_attunement_empathy.toFixed(2);
-                document.getElementById('confidenceSelfregulation').textContent = feedback.breakdown.confidence_selfregulation.toFixed(2);
+            const objectivesList = document.getElementById('objectives-completed');
+            objectivesList.innerHTML = '';
+            data.objectives_completed.forEach(obj => {
+                const li = document.createElement('li');
+                li.textContent = obj;
+                objectivesList.appendChild(li);
+            });
 
-                const medalsDiv = document.getElementById('medals');
-                medalsDiv.innerHTML = '';
-                feedback.medals.forEach(medal => {
-                    const medalSpan = document.createElement('span');
-                    medalSpan.className = 'medal';
-                    medalSpan.textContent = medal;
-                    medalsDiv.appendChild(medalSpan);
+            const transcriptContainer = document.getElementById('transcript');
+            transcriptContainer.innerHTML = '';
+            if (data.transcript) {
+                data.transcript.forEach(msg => {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `message ${msg.role}`;
+                    messageDiv.textContent = `${msg.role}: ${msg.content}`;
+                    transcriptContainer.appendChild(messageDiv);
                 });
-
-                document.getElementById('objectivesCompleted').textContent = feedback.objectives_completed.join(', ');
-
-                feedbackDiv.style.display = 'block';
-                getFeedbackBtn.disabled = true; // Disable after showing results
-            } catch (error) {
-                console.error('Error getting feedback:', error);
-                alert('Failed to get feedback: ' + error.message);
             }
-        });
+        }
     </script>
 </body>
 </html>

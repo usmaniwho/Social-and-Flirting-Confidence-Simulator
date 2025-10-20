@@ -1,74 +1,161 @@
-from models.models import EmotionData, FRSResult, BaselineData
-from core.data_contract._static_enums import Medal
+# core/scoring.py
+# FRS computation engine
+# 🔧 Implements the 35% visual / 40% vocal / 25% emotional weighting and returns
+#    a per-update FRSResult-like dict for immediate frontend feedback and accumulation.
+
+from typing import Dict, Any
+import math
 
 class FRSComputation:
-    @staticmethod
-    def compute_frs(data: EmotionData, baseline: BaselineData = None) -> FRSResult:
+    """
+    FRSComputation - update_metrics(session_id, emotions) returns a dict:
+      {
+        "charisma_friendliness": float(0-10),
+        "emotional_attunement_empathy": float(0-10),
+        "confidence_selfregulation": float(0-10),
+        "listening_reciprocal": float(0-10),
+        "frs_score": float(0-10),
+        "medals": [...optional...]
+      }
+    """
+
+    def __init__(self):
+        # Tunable multipliers / thresholds can be calibrated independently later
+        self.weights = {
+            "visual": 0.35,   # visual confidence
+            "vocal": 0.40,    # vocal fluency
+            "emotional": 0.25 # emotional awareness
+        }
+
+    def _scale(self, value: float) -> float:
+        """Ensure a [0..1] value to 0..10 scale"""
+        return max(0.0, min(1.0, value)) * 10.0
+
+    def _visual_score(self, emotions: Dict[str, Any]) -> float:
         """
-        Compute the FRS (Fluency & Readiness Score) from emotion data, compared to baseline.
-        New weights: Visual Confidence 35%, Vocal Fluency 40%, Emotional Awareness 25%
+        Visual Confidence (35%)
+        Use eye_contact, smile, engagement (face)
         """
-        # Calculate new components
-        visual_confidence = (data.eye_contact + data.smile) / 2.0  # Eye contact and smile for visual confidence
-        vocal_fluency = (data.vocal_tone + data.pacing) / 2.0  # Vocal tone and pacing for vocal fluency
-        emotional_awareness = data.engagement  # Engagement for emotional awareness
+        eye = emotions.get("eye_contact", 0.0)
+        smile = emotions.get("smile", 0.0)
+        engagement = emotions.get("engagement", 0.0)
+        # Weighted visual features (tunable)
+        visual_raw = 0.5 * eye + 0.35 * smile + 0.15 * engagement
+        return self._scale(visual_raw)
 
-        # If baseline provided, compare performance (reduced threshold for higher scores)
-        if baseline:
-            baseline_visual = (baseline.eye_contact + baseline.smile) / 2.0
-            baseline_vocal = (baseline.vocal_tone + baseline.pacing) / 2.0
-            visual_confidence = max(0, visual_confidence - 0.5 * baseline_visual)
-            vocal_fluency = max(0, vocal_fluency - 0.5 * baseline_vocal)
-            emotional_awareness = max(0, emotional_awareness - 0.5 * baseline.engagement)
+    def _vocal_score(self, emotions: Dict[str, Any]) -> float:
+        """
+        Vocal Fluency (40%)
+        Use vocal_tone, pacing, clarity (if available)
+        """
+        vocal = emotions.get("vocal_tone", 0.0)
+        pacing = emotions.get("pacing", 0.0)
+        # If 'fluency' or 'clarity' provided by Hume, they can be used here
+        clarity = emotions.get("clarity", None)
+        if clarity is None:
+            vocal_raw = 0.6 * vocal + 0.4 * pacing
+        else:
+            vocal_raw = 0.5 * vocal + 0.35 * pacing + 0.15 * clarity
+        return self._scale(vocal_raw)
 
-        # Weighted FRS score (0-10 scale) with new percentages
-        frs_score = (visual_confidence * 0.35 + vocal_fluency * 0.40 + emotional_awareness * 0.25) * 10
+    def _emotional_score(self, emotions: Dict[str, Any]) -> float:
+        """
+        Emotional Awareness (25%)
+        Use empathy-like signals: engagement, emotion_state mapping (e.g., 'happy' or 'focused' may boost)
+        """
+        engagement = emotions.get("engagement", 0.0)
+        emotion_state = emotions.get("emotion_state", "neutral")
+        # Map states to a small bonus
+        state_bonus_map = {
+            "happy": 0.1,
+            "focused": 0.1,
+            "neutral": 0.0,
+            "disengaged": -0.15,
+            "excited": 0.05,
+            "stressed": -0.2
+        }
+        bonus = state_bonus_map.get(emotion_state, 0.0)
+        emotional_raw = max(0.0, min(1.0, engagement + bonus))
+        return self._scale(emotional_raw)
 
-        # Map to existing breakdown for compatibility
-        charisma_friendliness = visual_confidence
-        emotional_attunement_empathy = emotional_awareness
-        confidence_selfregulation = vocal_fluency
-        listening_reciprocal = (data.eye_contact + data.vocal_tone) / 2.0  # Keep for listening aspect
-        if baseline:
-            listening_reciprocal = max(0, listening_reciprocal - ((baseline.eye_contact + baseline.vocal_tone) / 2.0))
+    def update_metrics(self, session_id: str, emotions: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Main call for the realtime pipeline.
+        Returns the component scores and composite FRS score.
+        """
+        visual = self._visual_score(emotions)
+        vocal = self._vocal_score(emotions)
+        emotional = self._emotional_score(emotions)
 
-        # Determine medals based on FRS score and traits
+        # For personality traits (charisma, etc.) we derive from component mix:
+        # - charisma_friendliness: favors visual + emotional
+        charisma = (0.6 * visual + 0.4 * emotional)
+        # - emotional_attunement_empathy: emotional + visual
+        empathy = (0.7 * emotional + 0.3 * visual)
+        # - confidence_selfregulation: vocal + visual
+        confidence = (0.7 * vocal + 0.3 * visual)
+        # - listening_reciprocal: vocal pacing + engagement
+        listening = (0.6 * vocal + 0.4 * emotional)
+
+        # Composite FRS (0-10)
+        frs_score = (self.weights["visual"] * visual +
+                     self.weights["vocal"] * vocal +
+                     self.weights["emotional"] * emotional)
+
+        # Basic medal heuristics — simple thresholds (calibrate later)
         medals = []
-        stars_earned = 1  # Base star for completing session
+        if charisma >= 8.0:
+            medals.append("Charisma")
+        if empathy >= 7.5:
+            medals.append("Compassion")
+        if confidence >= 7.0:
+            medals.append("Composure")
+        if listening >= 7.0:
+            medals.append("Adaptability")
 
-        if frs_score >= 8.5:
-            medals.extend([Medal.CHARISMA, Medal.FRIENDLINESS, Medal.COMPOSURE, Medal.AWARENESS])
-            stars_earned = 4
-        elif frs_score >= 7.0:
-            medals.extend([Medal.CHARISMA, Medal.FRIENDLINESS, Medal.COMPOSURE])
-            stars_earned = 3
-        elif frs_score >= 5.5:
-            medals.extend([Medal.FRIENDLINESS, Medal.COMPOSURE])
-            stars_earned = 2
-        elif frs_score >= 4.0:
-            medals.append(Medal.COMPOSURE)
-            stars_earned = 1
+        # Return nicely rounded values
+        def r(x): return round(x, 2)
+        return {
+            "charisma_friendliness": r(charisma),
+            "emotional_attunement_empathy": r(empathy),
+            "confidence_selfregulation": r(confidence),
+            "listening_reciprocal": r(listening),
+            "frs_score": r(frs_score),
+            "medals": medals
+        }
 
-        # Additional medals based on specific thresholds
-        if charisma_friendliness > 0.8:
-            if Medal.PERSUASION not in medals:
-                medals.append(Medal.PERSUASION)
-        if emotional_attunement_empathy > 0.8:
-            if Medal.COMPASSION not in medals:
-                medals.append(Medal.COMPASSION)
-        if confidence_selfregulation > 0.8:
-            if Medal.CLARITY not in medals:
-                medals.append(Medal.CLARITY)
-        if listening_reciprocal > 0.8:
-            if Medal.ADAPTABILITY not in medals:
-                medals.append(Medal.ADAPTABILITY)
+    @staticmethod
+    def compute_frs(data: 'EmotionData', baseline: 'BaselineData' = None) -> 'FRSResult':
+        """
+        Static method to compute FRS score from emotion data and optional baseline.
+        Compares current performance to baseline if provided.
+        """
+        instance = FRSComputation()
+        emotions = {
+            "eye_contact": data.eye_contact,
+            "smile": data.smile,
+            "vocal_tone": data.vocal_tone,
+            "pacing": data.pacing,
+            "engagement": data.engagement
+        }
 
+        # Adjust for baseline if available
+        if baseline:
+            emotions["eye_contact"] = max(0, emotions["eye_contact"] - baseline.eye_contact)
+            emotions["smile"] = max(0, emotions["smile"] - baseline.smile)
+            emotions["vocal_tone"] = max(0, emotions["vocal_tone"] - baseline.vocal_tone)
+            emotions["pacing"] = max(0, emotions["pacing"] - baseline.pacing)
+            emotions["engagement"] = max(0, emotions["engagement"] - baseline.engagement)
+
+        result = instance.update_metrics("temp", emotions)
+
+        from models.models import FRSResult
         return FRSResult(
-            charisma_friendliness=round(charisma_friendliness, 2),
-            emotional_attunement_empathy=round(emotional_attunement_empathy, 2),
-            confidence_selfregulation=round(confidence_selfregulation, 2),
-            listening_reciprocal=round(listening_reciprocal, 2),
-            frs_score=round(frs_score, 2),
-            medals=medals,
-            stars_earned=stars_earned
+            charisma_friendliness=result["charisma_friendliness"],
+            emotional_attunement_empathy=result["emotional_attunement_empathy"],
+            confidence_selfregulation=result["confidence_selfregulation"],
+            listening_reciprocal=result["listening_reciprocal"],
+            frs_score=result["frs_score"],
+            medals=result["medals"],
+            stars_earned=1  # Default, can be calculated based on score
         )

@@ -1,7 +1,12 @@
-from fastapi import APIRouter, HTTPException
+#session.py
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from models.models import SessionCreate, SessionSummary, FRSResult, ScenarioObjective, Mode
 from datetime import datetime
 import uuid
+import json
+import base64
+from core import session_store
+from hume_ai import analyze  # Use the analyze function from hume_ai/__init__.py
 
 router = APIRouter()
 
@@ -48,12 +53,12 @@ scenarios = {
         },
         "first_date_jitters": {
             "objective": ScenarioObjective(
-                main="Deepen conversation and build connection",
-                bonus=["Eye contact", "Share anecdotes", "Show reciprocity"],
+                main="Deepen the connection by asking engaging, non-generic questions that touch on passions, values, or dreams",
+                bonus=["Maintain natural eye contact", "Share a short, relevant personal anecdote", "Show reciprocity and balance in conversation"],
                 medal_conditions=["Charisma", "Friendliness", "Composure", "Compassion"],
                 dynamic_objectives=["Build trust quickly", "Respond well to awkward silence"]
             ),
-            "prompt": "You're on your first date and feeling a bit nervous. The conversation needs to flow naturally."
+            "prompt": "Imagine this: you're sitting at a cozy café, the soft hum of conversation and the aroma of coffee filling the air. Opposite you, on your video call screen, is Alex, your date. You've exchanged pleasantries – the standard 'How was your day?' and 'What do you do?' – but now there's a slight, almost imperceptible lull. It's that moment where the conversation could either fizzle into polite silence or spark into something genuinely engaging. Alex's expression is open, a slight smile on their lips, waiting. You see yourself in the small frame, and the microphone icon softly glows, signaling it's your turn. Your main goal in this scenario is to deepen the connection. This isn't about rapid-fire questions or dominating the conversation. It's about finding that natural pivot point to explore something more personal, something that truly reveals who Alex is, or who you are. You need to ask an engaging, non-generic question that touches on their passions, values, or dreams. While you're striving for that deeper connection, also remember to smoothly share a short, relevant personal anecdote. This shows you're not just interrogating them, but you're also willing to open up yourself, creating a comfortable space for reciprocity."
         },
         "coffee_shop_approach": {
             "objective": ScenarioObjective(
@@ -207,7 +212,17 @@ def end_session(session_id: str):
         'stars_earned': stars_earned,
         'ended_at': datetime.utcnow()
     }
+    emotion_summary = session_store.summarize_emotions(session_id)
+    summary_data['emotion_summary'] = emotion_summary
     session_store.save_session_summary(session_id, summary_data)
+
+    # Mark session as ended
+    session['ended'] = True
+    session_store.save_session(session_id, session)
+
+    # Get conversation transcript from session_store
+    conversation_history = session_store.get_full_transcript(session_id)
+    transcript = [{"role": msg["speaker"], "content": msg["text"]} for msg in conversation_history]
 
     # Clean up accumulated scores
     if session_id in accumulated_frs:
@@ -218,7 +233,8 @@ def end_session(session_id: str):
         "final_frs": final_frs.dict(),
         "feedback": feedback,
         "objectives_completed": objectives_completed,
-        "stars_earned": stars_earned
+        "stars_earned": stars_earned,
+        "transcript": transcript
     }
 
 @router.get("/modes")
@@ -279,7 +295,7 @@ async def generate_ai_response(session_id: str, user_message: UserMessage):
         session['conversation_history'] = conversation_history[-20:]  # Keep last 20 messages
         session_store.save_session(session_id, session)
 
-        # Generate voice audio
+        # Generate voice audio with personality settings
         elevenlabs_client = ElevenLabsClient()
         audio_bytes = await elevenlabs_client.generate_speech(response, Personality(personality))
 
@@ -294,3 +310,116 @@ async def generate_ai_response(session_id: str, user_message: UserMessage):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate AI response: {str(e)}")
+
+
+# ==============================================
+# 🎙️ NEW: LIVE VOICE + BODY LANGUAGE STREAM
+# ==============================================
+@router.websocket("/voice-stream/{session_id}")
+async def voice_stream(websocket: WebSocket, session_id: str):
+    """
+    WebSocket endpoint for receiving live mic + body language stream.
+    Flow:
+      - Receive base64 audio chunks and optional body landmarks.
+      - Send to Hume AI for emotional analysis.
+      - Generate GPT response and voice synthesis.
+      - Stream results (text + audio + emotions) back to the frontend.
+    """
+    await websocket.accept()
+    from core.session_store import session_store
+    from hume_ai import analyze as hume_analyze
+    from ai_personality.gpt_client import GPTClient
+    from elevenlabs_client import ElevenLabsClient
+    from core.scoring import FRSComputation
+    from api.routes.frs import accumulated_frs
+    import base64
+
+    gpt_client = GPTClient()
+    tts_client = ElevenLabsClient()
+    frs_engine = FRSComputation()
+
+    try:
+        session = session_store.get_session(session_id)
+        if not session:
+            await websocket.send_json({"error": "Session not found"})
+            await websocket.close()
+            return
+
+        conversation_history = session.get("conversation_history", [])
+        personality = session.get("personality", "default")
+
+        while True:
+            # Receive frontend message (audio, optional landmarks)
+            data = await websocket.receive_text()
+            payload = json.loads(data)
+
+            audio_chunk = payload.get("audio")  # base64 encoded
+            body_data = payload.get("body")      # pose/gesture data
+
+            # Step 1️⃣: Send to Hume AI Stream for emotional analysis
+            emotions = await hume_analyze(audio_chunk, body_data)
+
+            # Step 2️⃣: Generate GPT response based on detected emotion + context
+            user_text = payload.get("transcript", "")
+            ai_response = await gpt_client.generate_response(
+                user_text,
+                personality=personality,
+                conversation_history=conversation_history
+            )
+
+            # Step 3️⃣: Generate voice (TTS)
+            audio_bytes = await tts_client.generate_speech(ai_response, personality)
+            audio_b64 = base64.b64encode(audio_bytes).decode("utf-8") if audio_bytes else ""
+
+            # Step 4️⃣: Update session & compute FRS
+            conversation_history.append({"role": "user", "content": user_text})
+            conversation_history.append({"role": "assistant", "content": ai_response})
+            session["conversation_history"] = conversation_history[-20:]
+            session_store.save_session(session_id, session)
+
+            frs_score = frs_engine.update_metrics(session_id, emotions)
+            accumulated_frs.setdefault(session_id, []).append(frs_score)
+
+            # Step 5️⃣: Send response chunk to frontend
+            await websocket.send_json({
+                "response": ai_response,
+                "audio": audio_b64,
+                "emotions": emotions,
+                "frs_update": frs_score
+            })
+
+    except WebSocketDisconnect:
+        print(f"WebSocket disconnected for session {session_id}")
+    except Exception as e:
+        await websocket.send_json({"error": f"Internal error: {str(e)}"})
+        await websocket.close()
+
+
+
+@router.post("/calibrate")
+async def calibrate(payload: dict):
+    """
+    Payload: { session_id: str, audio: base64-string }
+    This endpoint stores a baseline sample — real implementation should analyze calibration sample using Hume
+    and store baseline feature vector per user. For now we store the raw audio or a computed baseline summary.
+    """
+    session_id = payload.get("session_id")
+    audio_b64 = payload.get("audio")
+    if not session_id or not audio_b64:
+        raise HTTPException(status_code=400, detail="session_id and audio required")
+
+    # decode and optionally run a quick Hume analysis to get baseline features
+    audio_bytes = base64.b64decode(audio_b64)
+    baseline = {}
+    try:
+        # If you have a lightweight hume analyze callable for small audio, use it:
+        baseline = await hume_analyze(audio_bytes, None)
+    except Exception as e:
+        print("Calibration Hume analyze failed:", e)
+        # fallback baseline (neutral)
+        baseline = {"eye_contact": 0.0, "smile": 0.0, "vocal_tone": 0.0, "pacing": 0.0, "engagement": 0.0}
+
+    session = session_store.get_session(session_id) or {}
+    session['calibration'] = baseline
+    session_store.save_session(session_id, session)
+    return {"status": "ok", "baseline": baseline}
