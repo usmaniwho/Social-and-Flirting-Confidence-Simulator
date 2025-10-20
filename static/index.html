@@ -54,6 +54,27 @@
             border: 1px solid #e2e8f0;
             border-radius: 5px;
         }
+        .record-button {
+            background: #e53e3e;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        .record-button:hover {
+            background: #c53030;
+        }
+        .record-button.recording {
+            background: #38a169;
+        }
+        .step-status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .success { color: #38a169; }
+        .failure { color: #e53e3e; }
         .video-container {
             text-align: center;
             margin: 20px 0;
@@ -184,6 +205,8 @@
         let personality = 'calm';
         let calibrationSteps = [];
         let currentStepIndex = 0;
+        let calibrationData = {};
+        let userId = 'user_' + Date.now();
         let ws = null;
         let voiceWs = null;
         let mediaRecorder = null;
@@ -239,8 +262,11 @@
                         ${step.line_to_read ? `<p>Read aloud: "${step.line_to_read}"</p>` : ''}
                         ${step.expression ? `<p>Show expression: ${step.expression}</p>` : ''}
                         ${step.gesture ? `<p>Perform gesture: ${step.gesture}</p>` : ''}
+                        <button class="record-button" id="record-step-${currentStepIndex}">Record Response</button>
+                        <div class="step-status" id="status-step-${currentStepIndex}"></div>
                     </div>
                 `;
+                document.getElementById(`record-step-${currentStepIndex}`).addEventListener('click', () => recordCalibrationStep(currentStepIndex));
             } else {
                 stepsContainer.innerHTML = '<p>Calibration complete!</p>';
                 document.getElementById('next-calibration').style.display = 'none';
@@ -253,8 +279,86 @@
             displayCalibrationStep();
         }
 
+        async function recordCalibrationStep(stepIndex) {
+            const button = document.getElementById(`record-step-${stepIndex}`);
+            const statusDiv = document.getElementById(`status-step-${stepIndex}`);
+            button.textContent = 'Recording...';
+            button.classList.add('recording');
+            button.disabled = true;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const mediaRecorder = new MediaRecorder(stream);
+                const audioChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    const formData = new FormData();
+                    formData.append('audio', audioBlob);
+                    formData.append('step_index', stepIndex);
+
+                    try {
+                        const response = await fetch('/api/calibration/analyze', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const data = await response.json();
+
+                        if (data.success) {
+                            statusDiv.textContent = '✓ Calibration successful!';
+                            statusDiv.className = 'step-status success';
+                            calibrationData[stepIndex] = data.analysis;
+                        } else {
+                            statusDiv.textContent = '✗ Calibration failed. Please try again.';
+                            statusDiv.className = 'step-status failure';
+                        }
+                    } catch (error) {
+                        console.error('Error analyzing calibration:', error);
+                        statusDiv.textContent = '✗ Analysis failed. Please try again.';
+                        statusDiv.className = 'step-status failure';
+                    }
+
+                    button.textContent = 'Record Response';
+                    button.classList.remove('recording');
+                    button.disabled = false;
+
+                    // Stop all tracks
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                mediaRecorder.start();
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                }, 5000); // Record for 5 seconds
+            } catch (error) {
+                console.error('Error recording calibration:', error);
+                statusDiv.textContent = '✗ Recording failed. Please check microphone permissions.';
+                statusDiv.className = 'step-status failure';
+                button.textContent = 'Record Response';
+                button.classList.remove('recording');
+                button.disabled = false;
+            }
+        }
+
         async function completeCalibration() {
-            // Simulate calibration completion
+            // Send calibration data to backend
+            try {
+                const response = await fetch('/api/calibration/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId, calibration_data: calibrationData })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    personality = data.personality;
+                }
+            } catch (error) {
+                console.error('Error completing calibration:', error);
+            }
             showScreen('mode-selection');
         }
 
@@ -289,7 +393,7 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        user_id: 'user_' + Date.now(),
+                        user_id: userId,
                         mode: mode,
                         scenario: scenario,
                         personality: personality

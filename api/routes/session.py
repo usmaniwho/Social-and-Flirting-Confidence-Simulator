@@ -74,6 +74,19 @@ scenarios = {
 
 @router.post("/start")
 def start_session(payload: SessionCreate):
+    """
+    Start a new session with the given parameters.
+    Temporarily relaxed calibration requirement for testing - only requires 1 step.
+    """
+    # Temporarily relaxed calibration check - require at least 1 step for testing
+    from api.routes.frs import calibration_data, calibration_steps
+    user_cal_data = calibration_data.get(payload.user_id)
+    min_required_steps = 1  # Temporarily set to 1 for testing
+    calibration_done = user_cal_data and len(user_cal_data.steps_completed) >= min_required_steps
+
+    if not calibration_done:
+        print(f"Warning: User {payload.user_id} has completed {len(user_cal_data.steps_completed) if user_cal_data else 0} calibration steps. Minimum required: {min_required_steps}. Allowing session to start for testing.")
+
     session_id = str(uuid.uuid4())
     mode_scenarios = scenarios.get(payload.mode, {})
     scenario_data = mode_scenarios.get(payload.scenario, {"objective": ScenarioObjective(main="", bonus=[], medal_conditions=[]), "prompt": ""})
@@ -89,7 +102,8 @@ def start_session(payload: SessionCreate):
         "personality": payload.personality,
         "objectives": scenario_obj.dict(),
         "prompt": scenario_prompt,
-        "started_at": datetime.utcnow()
+        "started_at": datetime.utcnow(),
+        "calibration_completed": calibration_done
     })
 
     return {

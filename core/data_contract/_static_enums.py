@@ -22,3 +22,24 @@ class Medal(StrEnum):
     CLARITY = "Clarity"
     AWARENESS = "Awareness"
     PERSUASION = "Persuasion"
+
+class CalibrationThresholds:
+    """Thresholds for calibration step validation"""
+    VOCAL_TONE_MIN =  0.5
+    ENGAGEMENT_VOICE_MIN = 0.6
+    SMILE_MIN = 0.7
+    EYE_CONTACT_MIN = 0.6
+    ENGAGEMENT_GESTURE_MIN = 0.5
+
+class MedalThresholds:
+    """Thresholds for awarding medals based on FRS components"""
+    CHARISMA_MIN = 8.0
+    EMPATHY_MIN = 7.5
+    CONFIDENCE_MIN = 7.0
+    LISTENING_MIN = 7.0
+
+class FeedbackThresholds:
+    """Thresholds for session feedback generation"""
+    EXCELLENT_MIN = 8.0
+    GOOD_MIN = 6.0
+    DECENT_MIN = 4.0

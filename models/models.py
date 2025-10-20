@@ -13,7 +13,7 @@ class CalibrationStep(BaseModel):
 class CalibrationData(BaseModel):
     user_id: str
     steps_completed: List[str]
-    baseline_emotions: Dict[str, float]
+    baseline_emotions: Dict[str, Dict[str, float]]  # Changed to Dict[str, Dict[str, float]] for per-step emotions
 
 class ConversationTranscript(BaseModel):
     session_id: str

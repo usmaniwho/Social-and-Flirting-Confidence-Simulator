@@ -103,14 +103,15 @@ class FRSComputation:
                      self.weights["emotional"] * emotional)
 
         # Basic medal heuristics — simple thresholds (calibrate later)
+        from core.data_contract import MedalThresholds
         medals = []
-        if charisma >= 8.0:
+        if charisma >= MedalThresholds.CHARISMA_MIN:
             medals.append("Charisma")
-        if empathy >= 7.5:
+        if empathy >= MedalThresholds.EMPATHY_MIN:
             medals.append("Compassion")
-        if confidence >= 7.0:
+        if confidence >= MedalThresholds.CONFIDENCE_MIN:
             medals.append("Composure")
-        if listening >= 7.0:
+        if listening >= MedalThresholds.LISTENING_MIN:
             medals.append("Adaptability")
 
         # Return nicely rounded values
