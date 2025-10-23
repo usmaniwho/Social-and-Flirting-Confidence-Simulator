@@ -113,6 +113,17 @@
             background: linear-gradient(90deg, #48bb78, #ed8936, #e53e3e);
             transition: width 0.5s;
         }
+        .emotions-display {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f7fafc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .emotion-item {
+            display: inline-block;
+            margin: 5px 10px;
+        }
         .feedback {
             margin: 20px 0;
         }
@@ -170,6 +181,13 @@
                     <div class="frs-bar">
                         <div id="frs-fill" class="frs-fill" style="width: 0%;"></div>
                     </div>
+                </div>
+                <div id="emotions-display" class="emotions-display">
+                    <strong>Emotions:</strong>
+                    <div id="emotions-list"></div>
+                </div>
+                <div id="volume-meter" style="width: 100%; height: 20px; background: #e2e8f0; border-radius: 10px; margin: 10px 0;">
+                    <div id="volume-fill" style="height: 100%; background: green; width: 0%; border-radius: 10px;"></div>
                 </div>
             </div>
             <div id="objectives">Objectives: Loading...</div>
@@ -495,10 +513,15 @@
         async function startStreaming() {
             try {
                 ws = new WebSocket(`ws://127.0.0.1:8000/api/stream/${sessionId}`);
+                ws.onopen = () => console.log('Streaming WebSocket connected');
                 ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
+                    console.log('Streaming WS received:', data);
                     if (data.frs) {
                         updateFRS(data.frs);
+                    }
+                    if (data.emotions) {
+                        updateEmotions(data.emotions);
                     }
                     if (data.ai_message) {
                         addMessage('ai', data.ai_message);
@@ -507,6 +530,8 @@
                         }
                     }
                 };
+                ws.onerror = (error) => console.error('Streaming WebSocket error:', error);
+                ws.onclose = () => console.log('Streaming WebSocket closed');
                 // Start voice call automatically
                 startVoiceCall();
             } catch (error) {
@@ -517,6 +542,32 @@
         function updateFRS(frs) {
             document.getElementById('frs-score').textContent = frs.frs_score.toFixed(1);
             document.getElementById('frs-fill').style.width = `${(frs.frs_score / 10) * 100}%`;
+            console.log('Real-time FRS:', frs.frs_score, 'Emotions:', frs);
+            if (frs.emotions) {
+                updateEmotions(frs.emotions);
+            }
+            // Log real-time FRS to console
+            console.log('Real-time FRS update:', frs);
+        }
+
+        function updateEmotions(emotions) {
+            const emotionsList = document.getElementById('emotions-list');
+            emotionsList.innerHTML = '';
+            if (emotions) {
+                Object.keys(emotions).forEach(key => {
+                    if (typeof emotions[key] === 'number') {
+                        const emotionDiv = document.createElement('div');
+                        emotionDiv.className = 'emotion-item';
+                        emotionDiv.textContent = `${key}: ${emotions[key].toFixed(2)}`;
+                        emotionsList.appendChild(emotionDiv);
+                    } else if (key === 'emotion_state') {
+                        const emotionDiv = document.createElement('div');
+                        emotionDiv.className = 'emotion-item';
+                        emotionDiv.textContent = `State: ${emotions[key]}`;
+                        emotionsList.appendChild(emotionDiv);
+                    }
+                });
+            }
         }
 
         function addMessage(sender, text) {
@@ -542,9 +593,38 @@
 
         async function startVoiceCall() {
             try {
-                voiceWs = new WebSocket(`ws://127.0.0.1:8000/realtime/voice-stream`);
+                voiceWs = new WebSocket(`ws://127.0.0.1:8000/api/voice-stream`);
                 voiceWs.onopen = () => {
                     navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                        // Set up volume monitoring
+                        const audioContext = new AudioContext();
+                        const analyser = audioContext.createAnalyser();
+                        const microphone = audioContext.createMediaStreamSource(stream);
+                        microphone.connect(analyser);
+                        analyser.fftSize = 256;
+                        const bufferLength = analyser.frequencyBinCount;
+                        const dataArray = new Uint8Array(bufferLength);
+
+                        function updateVolumeMeter() {
+                            analyser.getByteFrequencyData(dataArray);
+                            let sum = 0;
+                            for (let i = 0; i < bufferLength; i++) {
+                                sum += dataArray[i];
+                            }
+                            const average = sum / bufferLength;
+                            const volumePercent = Math.min((average / 128) * 100, 100);
+                            document.getElementById('volume-fill').style.width = volumePercent + '%';
+                            if (volumePercent > 50) {
+                                document.getElementById('volume-fill').style.background = 'green';
+                            } else if (volumePercent > 20) {
+                                document.getElementById('volume-fill').style.background = 'yellow';
+                            } else {
+                                document.getElementById('volume-fill').style.background = 'red';
+                            }
+                            requestAnimationFrame(updateVolumeMeter);
+                        }
+                        updateVolumeMeter();
+
                         mediaRecorder = new MediaRecorder(stream);
                         mediaRecorder.ondataavailable = (event) => {
                             audioChunks.push(event.data);
@@ -556,6 +636,7 @@
                                 const reader = new FileReader();
                                 reader.onloadend = () => {
                                     const base64Audio = reader.result.split(',')[1];
+                                    console.log('Sending audio chunk to backend for processing');
                                     voiceWs.send(JSON.stringify({
                                         session_id: sessionId,
                                         audio: base64Audio,
@@ -574,14 +655,18 @@
                 };
                 voiceWs.onmessage = (event) => {
                     const data = JSON.parse(event.data);
+                    console.log('Voice WS received:', data); // Debug log
                     if (data.response) {
                         addMessage('ai', data.response);
                         if (data.audio) {
                             playAudio(data.audio);
                         }
                     }
-                    if (data.frs_update) {
-                        updateFRS(data.frs_update);
+                    if (data.frs) {
+                        updateFRS(data.frs);
+                    }
+                    if (data.emotions_update) {
+                        updateEmotions(data.emotions_update);
                     }
                 };
             } catch (error) {
@@ -622,6 +707,21 @@
                 videoStream = null;
             }
 
+            // Send stop signal to voiceWs first
+            if (voiceWs && voiceWs.readyState === WebSocket.OPEN) {
+                voiceWs.send(JSON.stringify({ action: "stop", session_id: sessionId }));
+            }
+
+            // Close both WebSocket connections first to prevent further data sending
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.close(1000, "Session ended by user");
+                ws = null;
+            }
+            if (voiceWs && voiceWs.readyState === WebSocket.OPEN) {
+                voiceWs.close(1000, "Session ended by user");
+                voiceWs = null;
+            }
+
             try {
                 console.log('📡 Fetching feedback from /session/end/' + sessionId);
                 const response = await fetch(`/session/end/${sessionId}`, { method: 'POST' });
@@ -630,14 +730,6 @@
 
                 const data = await response.json();
                 console.log('✅ Session end data:', data);
-
-                // Close WebSocket connections before fetching session end to prevent further data sending
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.close(1000, "Session ended by user");
-                }
-                if (voiceWs && voiceWs.readyState === WebSocket.OPEN) {
-                    voiceWs.close(1000, "Session ended by user");
-                }
 
                 displayFeedback(data);
                 showScreen('feedback');

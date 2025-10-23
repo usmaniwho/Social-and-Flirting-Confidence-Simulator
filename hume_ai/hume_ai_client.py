@@ -6,9 +6,8 @@ import random
 import cv2
 import numpy as np
 from hume import AsyncHumeClient
-from hume.expression_measurement.stream import Config as EmConfig
+from hume.expression_measurement.stream import StreamFace, StreamLanguage, Config
 from hume.expression_measurement.stream.socket_client import StreamConnectOptions
-from hume.expression_measurement.stream import StreamFace, StreamLanguage
 # Note: Hume AI doesn't offer body-motion model publicly
 # We'll use MediaPipe for body language analysis
 try:
@@ -37,18 +36,14 @@ class HumeStreamClient:
     def __init__(self, api_key: str = None):
         # Load Hume API key from .env or passed argument
         self.api_key = api_key or os.getenv("HUME_API_KEY")
-        if not self.api_key:
-            raise ValueError("HUME_API_KEY environment variable not set")
+        self.hume_available = bool(self.api_key)
 
-        print("HumeStreamClient initialized with API key")
-        self.client = AsyncHumeClient(api_key=self.api_key)
-
-        # Configure face and language models for emotion measurement
-        # Body analysis will be handled through video batch processing
-        self.config = EmConfig(
-            face=StreamFace(),
-            language=StreamLanguage()
-        )
+        if self.hume_available:
+            print("HumeStreamClient initialized with API key")
+            self.client = AsyncHumeClient(api_key=self.api_key)
+        else:
+            print("Hume API key not set. Running in simulation mode.")
+            self.client = None
 
         self.socket = None
         self.stream_cm = None
@@ -58,10 +53,15 @@ class HumeStreamClient:
         Establish connection with Hume’s real-time stream endpoint.
         Enters the context manager and stores the socket for reuse.
         """
+        if not self.hume_available:
+            print("Hume not available, skipping connection")
+            return None
+
         if self.socket:
             return self.socket
 
-        options = StreamConnectOptions(config=self.config)
+        config = Config(face=StreamFace(), language=StreamLanguage())
+        options = StreamConnectOptions(config=config)
         self.stream_cm = self.client.expression_measurement.stream.connect(options=options)
         self.socket = await self.stream_cm.__aenter__()
         print("Connected to Hume streaming API")
@@ -224,13 +224,27 @@ class HumeStreamClient:
     async def send_mic_data(self, mic_data: bytes):
         """
         Send microphone (audio) data to Hume for conversation analysis.
+        Uses mock data for demonstration.
         """
-        if not self.socket:
-            await self.connect()
-        try:
-            await self.socket.send_audio(mic_data)
-        except Exception as e:
-            print(f"Error sending audio data to Hume: {e}")
+        print("Mock: Sending audio data to Hume for analysis")
+        # Mock successful analysis - return random emotion scores
+        import random
+        mock_emotions = {
+            "eye_contact": random.uniform(0.3, 0.9),
+            "smile": random.uniform(0.2, 0.8),
+            "vocal_tone": random.uniform(0.4, 0.9),
+            "pacing": random.uniform(0.3, 0.8),
+            "engagement": random.uniform(0.5, 0.9),
+            "prosody": random.uniform(0.4, 0.8),
+            "emotion_state": random.choice(["happy", "focused", "neutral", "excited", "stressed"]),
+            "body_language_state": random.choice(["confident", "engaged", "neutral", "closed_off"]),
+            "conversation_quality": random.choice(["excellent", "good", "adequate"])
+        }
+        print(f"Mock Hume analysis result: {mock_emotions}")
+        # Store mock emotions for callback
+        if hasattr(self, '_on_emotion_callback') and self._on_emotion_callback:
+            self._on_emotion_callback(mock_emotions)
+        return mock_emotions
 
     async def send_body_data(self, body_frame: bytes):
         """
@@ -247,6 +261,15 @@ class HumeStreamClient:
         """
         Analyze audio using Hume's batch emotion measurement API for conversation.
         """
+        if not self.hume_available:
+            # Return mock data when Hume is not available
+            return {
+                "vocal_tone": 0.5,
+                "pacing": 0.5,
+                "engagement": 0.5,
+                "prosody": 0.5
+            }
+
         try:
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
                 temp_file.write(audio_bytes)
@@ -298,6 +321,14 @@ class HumeStreamClient:
         """
         Analyze video using Hume's batch emotion measurement API for face and body.
         """
+        if not self.hume_available:
+            # Return mock data when Hume is not available
+            return {
+                "eye_contact": 0.5,
+                "smile": 0.6,
+                "facial_expression": 0.4
+            }
+
         try:
             with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as temp_file:
                 temp_file.write(video_bytes)

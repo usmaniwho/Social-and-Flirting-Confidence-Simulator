@@ -39,12 +39,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(frs_router, prefix="/api", tags=["FRS"])
 app.include_router(session_router, prefix="/session", tags=["Session"])
 app.include_router(conversation_router, prefix="/api", tags=["Conversation"])
-app.include_router(voice_router, prefix="/realtime", tags=["Voice Call"])
 
 # 💬 NEW: Add WebSocket router
 # -----------------------------
-# 🟢 This is where your `/ws/voice_call` endpoint is registered.
-app.include_router(voice_router, prefix="/realtime", tags=["Voice Call"])
+# 🟢 This is where your `/api/voice-stream` endpoint is registered.
+app.include_router(voice_router, prefix="/api", tags=["Voice Call"])
 
 # Add calibration steps endpoint
 @app.get("/api/calibration/steps")

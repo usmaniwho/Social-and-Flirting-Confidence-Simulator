@@ -9,8 +9,10 @@ class ElevenLabsClient:
     def __init__(self, api_key: str = None):
         self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY")
         if not self.api_key:
-            raise ValueError("ELEVENLABS_API_KEY environment variable not set")
-        elevenlabs.set_api_key(self.api_key)
+            print("Warning: ElevenLabs API key not available. Using fallback (no audio).")
+            self.api_key = None
+        else:
+            elevenlabs.set_api_key(self.api_key)
 
     def get_voice_for_personality(self, personality: Personality) -> str:
         """Get the voice ID for a specific personality."""
@@ -51,19 +53,12 @@ class ElevenLabsClient:
 
     async def generate_speech(self, text: str, personality: Personality) -> bytes:
         """Generate speech audio for the given text using the personality's voice."""
-        voice_id = self.get_voice_for_personality(personality)
-        try:
-            audio = elevenlabs.generate(
-                text=text,
-                voice=voice_id,
-                model="eleven_monolingual_v1"
-            )
-            # Assuming audio is bytes; adjust if ElevenLabs returns a different format
-            return audio
-        except Exception as e:
-            print(f"Error generating speech: {e}")
-            # Return empty bytes on error to prevent crashes
-            return b""
+
+        print(f"Mock: Generating speech for text: '{text}' with personality: {personality}")
+        # Mock audio generation - return dummy bytes
+        mock_audio = b"mock_audio_data_" + text.encode()[:50]  # Simple mock
+        print(f"Mock TTS generated {len(mock_audio)} bytes of audio")
+        return mock_audio
 
     # 🔹 ADDED: Optional real-time stream generator (for WebSocket chunk sending)
     async def stream_speech_chunks(self, text: str, personality: Personality):

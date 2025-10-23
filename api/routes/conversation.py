@@ -134,10 +134,10 @@ async def transcribe_audio(audio_bytes: bytes) -> str:
         # ✅ Use in-memory stream instead of temp files
         audio_file = io.BytesIO(audio_bytes)
 
-        # ✅ Use async Whisper endpoint
+        # ✅ Use async Whisper endpoint with proper file format specification
         transcription = await openai_client.audio.transcriptions.create(
             model="whisper-1",
-            file=audio_file
+            file=("audio.webm", audio_file, "audio/webm")
         )
         return transcription.text.strip()
 

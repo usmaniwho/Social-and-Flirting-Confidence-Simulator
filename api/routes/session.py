@@ -136,7 +136,10 @@ def end_session(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Get accumulated FRS scores
+    # Import accumulated_frs from frs.py to use unified accumulation
+    from api.routes.frs import accumulated_frs
+
+    # Get accumulated FRS scores from frs.py (unified accumulation)
     frs_scores = accumulated_frs.get(session_id, [])
     if not frs_scores:
         # No FRS data accumulated, provide default feedback
@@ -153,7 +156,7 @@ def end_session(session_id: str):
         objectives_completed = []
         stars_earned = 0
     else:
-        # Compute average FRS result
+        # Compute average FRS result from accumulated scores
         num_scores = len(frs_scores)
         avg_charisma_friendliness = sum(score['charisma_friendliness'] for score in frs_scores) / num_scores
         avg_emotional_attunement_empathy = sum(score['emotional_attunement_empathy'] for score in frs_scores) / num_scores
@@ -399,7 +402,7 @@ async def voice_stream(websocket: WebSocket, session_id: str):
                 "response": ai_response,
                 "audio": audio_b64,
                 "emotions": emotions,
-                "frs_update": frs_score
+                "frs": frs_score
             })
 
     except WebSocketDisconnect:

@@ -9,11 +9,10 @@ from ai_personality import GPTClient
 from elevenlabs_client import ElevenLabsClient
 from core.scoring import FRSComputation
 from hume_ai import HumeStreamClient
+from core.baselines import baselines
+from api.routes.frs import accumulated_frs  # Import shared accumulated_frs
 
 router = APIRouter()
-
-# Accumulated frs (keeps updates until /session/end is called)
-accumulated_frs = {}
 
 gpt_client = GPTClient()
 tts_client = ElevenLabsClient()
@@ -37,10 +36,7 @@ async def voice_stream(websocket: WebSocket):
     await hume_client.connect()
 
     # Shared variable for latest emotions
-    latest_emotions = {
-        "eye_contact": 0.0, "smile": 0.0, "vocal_tone": 0.0,
-        "pacing": 0.0, "engagement": 0.0, "emotion_state": "neutral"
-    }
+    latest_emotions = None
 
     # Callback to update latest emotions
     def on_emotion_callback(emotions):
@@ -49,6 +45,28 @@ async def voice_stream(websocket: WebSocket):
 
     # Start receive_loop in background task
     receive_task = asyncio.create_task(hume_client.receive_loop(on_emotion_callback))
+
+    # Initialize session_id
+    session_id = None
+
+    # Background task for real-time FRS updates
+    async def send_realtime_updates():
+        while True:
+            try:
+                # Send FRS update every 0.2 seconds for more frequent updates
+                await asyncio.sleep(0.2)
+                if session_id and accumulated_frs.get(session_id):
+                    latest_frs = accumulated_frs[session_id][-1]
+                    await websocket.send_json({
+                        "frs_update": latest_frs
+                    })
+                    print(f"Real-time FRS update sent: {latest_frs['frs_score']}")
+            except Exception as e:
+                print(f"Error sending real-time update: {e}")
+                break
+
+    # Start real-time update task
+    update_task = asyncio.create_task(send_realtime_updates())
 
     try:
         while True:
@@ -59,6 +77,17 @@ async def voice_stream(websocket: WebSocket):
             if not session_id:
                 await websocket.send_json({"error": "Missing session_id"})
                 continue
+
+            # Handle stop signal
+            if payload.get("action") == "stop":
+                print(f"Stop signal received for session {session_id}")
+                # Mark session as ended to prevent further processing
+                session = session_store.get_session(session_id)
+                if session:
+                    session['ended'] = True
+                    session_store.save_session(session_id, session)
+                await websocket.close()
+                return
 
             # Check if session is ended
             session = session_store.get_session(session_id)
@@ -75,6 +104,8 @@ async def voice_stream(websocket: WebSocket):
             # audio: base64 encoded bytes from frontend
             audio_b64 = payload.get("audio")
             body_data = payload.get("body")  # optional pose/landmarks
+
+            print(f"Audio received from frontend for session {session_id}")
 
             # If frontend sent a transcript (quick path), accept it else server should transcribe
             transcript = payload.get("transcript")
@@ -109,24 +140,48 @@ async def voice_stream(websocket: WebSocket):
                     audio_bytes = None
 
             # 2) Send audio data to Hume stream if available
+            emotions = {}
             if audio_bytes:
                 try:
                     await hume_client.send_mic_data(audio_bytes)
+                    # Wait a bit for streaming data
+                    await asyncio.sleep(0.5)
+                    if latest_emotions:
+                        emotions = latest_emotions.copy()
                 except Exception as e:
                     print(f"Error sending audio to Hume: {e}")
 
-            # 3) Use latest emotions from streaming callback
-            emotions = latest_emotions.copy()
+            # Fallback to batch analysis if streaming failed or no data
+            if not emotions:
+                try:
+                    emotions = await hume_client._analyze_audio_batch(audio_bytes)
+                    print(f"Batch analysis successful: {emotions}")
+                except Exception as e:
+                    print(f"Batch audio analysis failed: {e}")
+                    # Use default emotions if all Hume analysis fails
+                    emotions = {
+                        "eye_contact": 0.5,
+                        "smile": 0.5,
+                        "vocal_tone": 0.5,
+                        "pacing": 0.5,
+                        "engagement": 0.5,
+                        "emotion_state": "neutral"
+                    }
 
             # 3) If transcript missing, use OpenAI Whisper to transcribe the audio
+            print(f"Transcript provided: {transcript}")
             if not transcript and audio_bytes:
+                print("Attempting transcription...")
                 try:
                     transcript = await gpt_client.transcribe_audio(audio_bytes)
+                    print(f"Transcription successful: {transcript}")
                 except Exception as e:
                     print(f"Transcription error: {e}")
                     transcript = payload.get("fallback_text", "[audio received]")
+                    print(f"Using fallback transcript: {transcript}")
 
             # 4) Generate GPT reply adapted to user's emotion state
+            print(f"Generating GPT response for transcript: {transcript}")
             try:
                 ai_response = await gpt_client.generate_emotionally_adaptive_response(
                     user_text=transcript,
@@ -134,19 +189,25 @@ async def voice_stream(websocket: WebSocket):
                     emotion_state=emotions.get("emotion_state", "neutral"),
                     history=session.get("conversation_history", [])
                 )
+                print(f"GPT response generated: {ai_response}")
             except Exception as e:
                 print(f"GPT error: {e}")
                 ai_response = "Sorry, I couldn't process that. Could you say it again?"
+                print(f"Using fallback GPT response: {ai_response}")
 
             # 5) Style text for TTS using ElevenLabs helper (keeps existing logic intact)
             styled_text = tts_client.style_text_for_personality(ai_response, personality)
+            print(f"Styled text for TTS: {styled_text}")
 
             # 6) Generate speech bytes (non-streaming for now) - you can switch to stream_speech_chunks() later
+            print("Generating TTS audio...")
             try:
                 tts_bytes = await tts_client.generate_speech(styled_text, personality)
+                print(f"TTS audio generated, size: {len(tts_bytes)} bytes")
             except Exception as e:
                 print(f"TTS error: {e}")
                 tts_bytes = b""
+                print("Using empty audio fallback")
 
             tts_b64 = base64.b64encode(tts_bytes).decode("utf-8") if tts_bytes else ""
 
@@ -165,15 +226,36 @@ async def voice_stream(websocket: WebSocket):
                 print(f"SessionStore stream log error: {e}")
 
             # 8) Compute FRS update from emotions
-            frs_update = frs_engine.update_metrics(session_id, emotions)
+            baseline = baselines.get(session.get('user_id'))
+            frs_update = frs_engine.update_metrics(session_id, emotions, baseline)
             accumulated_frs.setdefault(session_id, []).append(frs_update)
 
+            # Print FRS to terminal
+            print(f"Real-time FRS for session {session_id}: {frs_update}")
+
             # 9) Send response back to frontend
+            print(f"Sending response back to frontend for session {session_id}")
             await websocket.send_json({
                 "response": ai_response,
                 "audio": tts_b64,
                 "emotions": emotions,
+                "frs": frs_update
+            })
+
+            # Send frequent emotion updates to frontend
+            if emotions:
+                await websocket.send_json({
+                    "emotions_update": emotions
+                })
+
+            # Send FRS update separately for frequent updates
+            await websocket.send_json({
                 "frs_update": frs_update
+            })
+
+            # Send GPT response update for real-time display
+            await websocket.send_json({
+                "gpt_response": ai_response
             })
 
     except WebSocketDisconnect:

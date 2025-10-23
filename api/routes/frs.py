@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Up
 from models.models import EmotionData, FRSResult, BaselineData, CalibrationStep, CalibrationData, CalibrateStepRequest
 from core.scoring import FRSComputation
 from hume_ai.hume_ai_client import HumeStreamClient
+from core.baselines import baselines
 import asyncio
 from typing import Dict, Any, List
 import os
@@ -10,7 +11,6 @@ import shutil
 router = APIRouter()
 
 # In-memory storage for baselines and calibration (use DB in production)
-baselines: Dict[str, BaselineData] = {}
 calibration_data: Dict[str, CalibrationData] = {}
 active_clients: Dict[str, HumeStreamClient] = {}
 # In-memory storage for accumulated FRS scores per session
@@ -121,28 +121,7 @@ async def calibrate_step(request: CalibrateStepRequest):
     try:
         emotions = await client.quick_analyze(audio_bytes=audio_bytes, video_bytes=video_bytes)
     except ValueError as e:
-        print(f"Hume analysis failed for step {step_id}: {e}")
-        # Fallback: simulate based on step type
-        import random
-        if step.line_to_read:  # Voice step
-            emotions = {
-                "vocal_tone": random.uniform(0.4, 0.9),
-                "engagement": random.uniform(0.5, 0.95),
-                "pacing": random.uniform(0.3, 0.8)
-            }
-        elif step.expression:  # Expression step
-            emotions = {
-                "smile": random.uniform(0.3, 0.8),
-                "eye_contact": random.uniform(0.4, 0.9)
-            }
-        elif step.gesture:  # Gesture step
-            emotions = {
-                "engagement": random.uniform(0.5, 0.95),
-                "posture": random.uniform(0.4, 0.8),
-                "gesture": random.uniform(0.3, 0.7)
-            }
-        else:
-            emotions = {}
+        raise HTTPException(status_code=400, detail=f"Hume analysis failed: {e}. Ensure audio or video data is provided and Hume API is configured.")
 
     # Check thresholds based on step type
     from core.data_contract import CalibrationThresholds
@@ -152,7 +131,7 @@ async def calibrate_step(request: CalibrateStepRequest):
     elif step.expression:  # Expression step
         success = emotions.get("smile", 0) > CalibrationThresholds.SMILE_MIN and emotions.get("eye_contact", 0) > CalibrationThresholds.EYE_CONTACT_MIN
     elif step.gesture:  # Gesture step (basic check, could be improved with body data)
-        success = emotions.get("engagement", 0) > CalibrationThresholds.ENGAGEMENT_GESTURE_MIN  # Placeholder
+        success = emotions.get("engagement", 0) > CalibrationThresholds.ENGAGEMENT_GESTURE_MIN
 
     if success:
         # Store emotion data for this step
@@ -164,7 +143,7 @@ async def calibrate_step(request: CalibrateStepRequest):
 
         return {"message": f"Step {step_id} calibrated successfully", "completed_steps": calibration_data[user_id].steps_completed, "success": True}
     else:
-        return {"message": f"Step {step_id} failed calibration. Please try again.", "success": False, "emotions": emotions}
+        return {"message": f"Step {step_id} failed calibration. Emotions detected: {emotions}. Please try again.", "success": False, "emotions": emotions}
 
 @router.post("/calibrate/complete")
 def complete_calibration(user_id: str):
@@ -216,22 +195,22 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
     print(f"WebSocket connection accepted for session {session_id}")
 
     streaming_sessions[session_id] = True
-    simulation_task = None
     is_streaming = True
 
     try:
-        # Hume AI integration disabled due to SDK compatibility issues
         # Initialize Hume client if API key is available
         api_key = os.getenv("HUME_API_KEY")
         client = None
-        # if api_key:
-        #     try:
-        #         client = HumeStreamClient(api_key=api_key)
-        #         active_clients[session_id] = client
-        #         await client.connect()
-        #     except Exception as e:
-        #         print(f"Failed to initialize Hume client for session {session_id}: {e}")
-        #         client = None
+        if api_key:
+            try:
+                client = HumeStreamClient(api_key=api_key)
+                active_clients[session_id] = client
+                await client.connect()
+            except Exception as e:
+                print(f"Failed to initialize Hume client for session {session_id}: {e}")
+                client = None
+        else:
+            print(f"No Hume API key set for session {session_id}. Streaming will not work.")
 
         # Get session prompt and personality for AI conversation
         from core.session_store import session_store
@@ -297,31 +276,18 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
                     "frs": frs_result.model_dump()
                 }
                 await websocket.send_json(data_to_send)
-                print(f"Sent data to frontend for session {session_id}: emotions={mapped_data}, frs={frs_result.frs_score}")
+                print(f"Real-time FRS for session {session_id}: {frs_result.frs_score}, emotions: {mapped_data}")
             except Exception as e:
                 print(f"Error sending to frontend for session {session_id}: {e}")
 
-        # For testing, always simulate emotion data regardless of Hume API
-        async def simulate_emotion_data():
-            import random
-            import asyncio
-
-            while is_streaming:
-                # Simulate realistic emotion data
-                emotion_data = {
-                    "eye_contact": random.uniform(0.3, 0.9),
-                    "smile": random.uniform(0.2, 0.8),
-                    "vocal_tone": random.uniform(0.4, 0.9),
-                    "pacing": random.uniform(0.3, 0.8),
-                    "engagement": random.uniform(0.5, 0.95)
-                }
-
-                print(f"Simulating emotion data for session {session_id}: {emotion_data}")
-                await send_to_frontend(emotion_data)
-                await asyncio.sleep(1)  # Send data every second
-
-        # Start simulation for testing as a cancellable task
-        simulation_task = asyncio.create_task(simulate_emotion_data())
+        # If Hume client is available, start receiving loop
+        if client:
+            receive_task = asyncio.create_task(client.receive_loop(send_to_frontend))
+        else:
+            # No Hume client, cannot stream real data
+            await websocket.send_json({"error": "Hume API not configured. Cannot start streaming."})
+            await websocket.close()
+            return
 
         # Listen for messages from frontend (user responses or stop signal)
         try:
@@ -331,12 +297,6 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
                     if data.get("action") == "stop":
                         print(f"Stop signal received for session {session_id}")
                         is_streaming = False
-                        if simulation_task and not simulation_task.done():
-                            simulation_task.cancel()
-                            try:
-                                await simulation_task
-                            except asyncio.CancelledError:
-                                print(f"Simulation task cancelled for session {session_id}")
                         await websocket.close()  # Close the WebSocket immediately
                         break
                     elif "user_message" in data and gpt_client and personality:
@@ -356,12 +316,6 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
         except WebSocketDisconnect:
             print(f"Client for session {session_id} disconnected")
             is_streaming = False
-            if simulation_task and not simulation_task.done():
-                simulation_task.cancel()
-                try:
-                    await simulation_task
-                except asyncio.CancelledError:
-                    print(f"Simulation task cancelled for session {session_id}")
 
     except WebSocketDisconnect:
         print(f"Client for session {session_id} disconnected")
@@ -375,14 +329,6 @@ async def stream_emotions(websocket: WebSocket, session_id: str):
     finally:
         is_streaming = False
         streaming_sessions[session_id] = False
-        if simulation_task and not simulation_task.done():
-            simulation_task.cancel()
-            try:
-                await simulation_task
-            except asyncio.CancelledError:
-                print(f"Simulation task cancelled for session {session_id}")
-            except Exception as e:
-                print(f"Error cancelling simulation task for session {session_id}: {e}")
         if session_id in active_clients:
             try:
                 await active_clients[session_id].disconnect()
@@ -447,8 +393,32 @@ def end_session(session_id: str):
     if not frs_scores:
         return {"message": "No FRS data found for session", "feedback": "No feedback available"}
 
-    # Calculate average FRS score
+    # Calculate average FRS components
+    avg_charisma = sum(score["charisma_friendliness"] for score in frs_scores) / len(frs_scores)
+    avg_empathy = sum(score["emotional_attunement_empathy"] for score in frs_scores) / len(frs_scores)
+    avg_confidence = sum(score["confidence_selfregulation"] for score in frs_scores) / len(frs_scores)
+    avg_listening = sum(score["listening_reciprocal"] for score in frs_scores) / len(frs_scores)
     avg_frs = sum(score["frs_score"] for score in frs_scores) / len(frs_scores)
+
+    # Union of all medals earned
+    all_medals = set()
+    for score in frs_scores:
+        all_medals.update(score["medals"])
+    medals_list = list(all_medals)
+
+    # Calculate stars based on average FRS
+    if avg_frs >= 9.0:
+        stars_earned = 5
+    elif avg_frs >= 8.0:
+        stars_earned = 4
+    elif avg_frs >= 7.0:
+        stars_earned = 3
+    elif avg_frs >= 6.0:
+        stars_earned = 2
+    elif avg_frs >= 5.0:
+        stars_earned = 1
+    else:
+        stars_earned = 0
 
     # Generate feedback based on FRS score
     from core.data_contract import FeedbackThresholds
@@ -461,10 +431,29 @@ def end_session(session_id: str):
     else:
         feedback = "There's room for improvement. Practice maintaining eye contact, smiling genuinely, and using a more engaging vocal tone."
 
+    # Get transcript from session store
+    from core.session_store import session_store
+    transcript = session_store.get_full_transcript(session_id)
+
+    # Create full FRSResult
+    from models.models import FRSResult
+    final_frs = FRSResult(
+        charisma_friendliness=round(avg_charisma, 2),
+        emotional_attunement_empathy=round(avg_empathy, 2),
+        confidence_selfregulation=round(avg_confidence, 2),
+        listening_reciprocal=round(avg_listening, 2),
+        frs_score=round(avg_frs, 2),
+        medals=medals_list,
+        stars_earned=stars_earned
+    )
+
     return {
         "message": "Session ended successfully",
-        "average_frs": round(avg_frs, 2),
-        "feedback": feedback,
+        "final_frs": final_frs.model_dump(),
+        "feedback": {"overall": feedback},
+        "objectives_completed": [],  # Placeholder, can be implemented later
+        "stars_earned": stars_earned,
+        "transcript": transcript,
         "total_readings": len(frs_scores)
     }
 
@@ -483,30 +472,23 @@ async def upload_video(user_id: str, file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    # For now, simulate processing since Hume AI client doesn't support video processing directly
-    # In a real implementation, you'd integrate with Hume's batch API or similar
-    import random
-
-    # Simulate processing time
-    await asyncio.sleep(2)
-
-    # Simulate aggregated emotion data from video
-    aggregated_emotions = {
-        "eye_contact": random.uniform(0.4, 0.9),
-        "smile": random.uniform(0.3, 0.8),
-        "vocal_tone": random.uniform(0.5, 0.9),
-        "pacing": random.uniform(0.4, 0.8),
-        "engagement": random.uniform(0.6, 0.95)
-    }
+    # Use Hume AI batch analysis for real emotion detection
+    client = HumeStreamClient()
+    try:
+        with open(file_path, "rb") as f:
+            video_bytes = f.read()
+        emotions = await client.quick_analyze(video_bytes=video_bytes)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Hume video analysis failed: {e}")
 
     # Compute FRS
-    emotion_obj = EmotionData(**aggregated_emotions)
+    emotion_obj = EmotionData(**emotions)
     baseline = baselines.get(user_id)
     frs_result = FRSComputation.compute_frs(emotion_obj, baseline)
 
     return {
         "message": "Video processed successfully",
         "file_path": file_path,
-        "aggregated_emotions": aggregated_emotions,
+        "aggregated_emotions": emotions,
         "frs_result": frs_result.dict()
     }

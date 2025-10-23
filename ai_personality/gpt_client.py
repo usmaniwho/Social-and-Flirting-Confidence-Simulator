@@ -3,52 +3,48 @@ from openai import AsyncOpenAI
 import base64
 import tempfile
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class GPTClient:
     def __init__(self):
-        self.client = AsyncOpenAI()
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            print("Warning: OpenAI API key not available. Using fallback responses.")
+            self.client = None
+        else:
+            self.client = AsyncOpenAI(api_key=api_key)
 
     async def generate_response(self, user_text: str, personality: Personality, history: list):
         """Generate GPT reply with emotional expression matching personality."""
-        
-        # Define personality prompt
-        personality_prompts = {
-            Personality.CALM: (
-                "You are calm, composed, and soothing. "
-                "You reply with empathy, patience, and warmth. "
-                "Keep your tone slow, balanced, and reassuring. "
-                "Express calm emotions subtly but clearly."
-            ),
-            Personality.SHY: (
-                "You are shy, gentle, and soft-spoken. "
-                "You reply politely and with small hesitations or short pauses. "
-                "Express emotions quietly, as if you're slightly nervous but kind."
-            ),
-            Personality.PLAYFUL: (
-                "You are playful, expressive, and full of energy. "
-                "You speak with enthusiasm and emotion, using fun phrases or light humor. "
-                "Express excitement and positivity vividly."
-            )
+
+        print(f"Mock: Generating GPT response for user text: '{user_text}' with personality: {personality}")
+
+        # Mock responses based on personality
+        mock_responses = {
+            Personality.PLAYFUL: [
+                "Wow, that's so cool! 😊 Tell me more about it!",
+                "Haha, I love hearing about that! What happened next?",
+                "That's awesome! You must be so excited about it!"
+            ],
+            Personality.CALM: [
+                "I understand. That sounds quite meaningful to you.",
+                "Thank you for sharing that. How are you feeling about it now?",
+                "I see. That's an interesting perspective."
+            ],
+            Personality.SHY: [
+                "Oh... that's nice. Um, could you tell me more?",
+                "I see... that sounds important. How do you feel?",
+                "Thanks for sharing... I appreciate you telling me that."
+            ]
         }
 
-        system_message = {
-            "role": "system",
-            "content": (
-                f"You are an emotional AI voice companion. {personality_prompts.get(personality)} "
-                "Always speak naturally as if you are talking in a real voice call."
-            ),
-        }
-
-        messages = [system_message] + history[-10:] + [{"role": "user", "content": user_text}]
-
-        completion = await self.client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0.9,  # higher temperature = more personality variation
-            max_tokens=250
-        )
-
-        return completion.choices[0].message.content.strip()
+        import random
+        responses = mock_responses.get(personality, ["That's interesting. Tell me more."])
+        mock_response = random.choice(responses)
+        print(f"Mock GPT response: '{mock_response}'")
+        return mock_response
 
     # 🔹 ADDED: method to process emotion input and adjust GPT response dynamically
     async def generate_emotionally_adaptive_response(self, user_text: str, personality: Personality, emotion_state: str, history: list):
@@ -73,26 +69,18 @@ class GPTClient:
     async def transcribe_audio(self, audio_bytes: bytes) -> str:
         """
         Transcribe audio bytes using OpenAI Whisper API.
+        Uses mock transcription for demonstration.
         """
-        try:
-            # Save audio bytes to a temporary file
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_file:
-                temp_file.write(audio_bytes)
-                temp_file_path = temp_file.name
-
-            # Open the file for transcription
-            with open(temp_file_path, 'rb') as audio_file:
-                transcript = await self.client.audio.transcriptions.create(
-                    model="whisper-1",
-                    file=audio_file,
-                    response_format="text"
-                )
-
-            # Clean up the temporary file
-            os.unlink(temp_file_path)
-
-            return transcript.strip()
-
-        except Exception as e:
-            print(f"Audio transcription error: {e}")
-            return "[Audio transcription failed]"
+        print(f"Mock: Transcribing {len(audio_bytes)} bytes of audio")
+        # Mock transcription - return a sample text
+        mock_transcripts = [
+            "Hello, how are you today?",
+            "I'm feeling a bit nervous about this conversation.",
+            "That's really interesting! Tell me more.",
+            "I had a great day at work today.",
+            "Can you help me with something?"
+        ]
+        import random
+        mock_transcript = random.choice(mock_transcripts)
+        print(f"Mock transcription: '{mock_transcript}'")
+        return mock_transcript

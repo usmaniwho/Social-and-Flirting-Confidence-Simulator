@@ -28,8 +28,8 @@ class FRSComputation:
         }
 
     def _scale(self, value: float) -> float:
-        """Ensure a [0..1] value to 0..10 scale"""
-        return max(0.0, min(1.0, value)) * 10.0
+        """Scale value to 0..10+ scale (no upper cap for baseline-adjusted scores)"""
+        return max(0.0, value) * 10.0
 
     def _visual_score(self, emotions: Dict[str, Any]) -> float:
         """
@@ -78,11 +78,22 @@ class FRSComputation:
         emotional_raw = max(0.0, min(1.0, engagement + bonus))
         return self._scale(emotional_raw)
 
-    def update_metrics(self, session_id: str, emotions: Dict[str, Any]) -> Dict[str, Any]:
+    def update_metrics(self, session_id: str, emotions: Dict[str, Any], baseline: 'BaselineData' = None) -> Dict[str, Any]:
         """
         Main call for the realtime pipeline.
         Returns the component scores and composite FRS score.
+        For demo purposes, use raw emotion scores without baseline subtraction.
         """
+        # For demo, use raw emotions without baseline adjustment to show meaningful FRS scores
+        # Uncomment below for production baseline adjustment
+        # if baseline:
+        #     emotions = emotions.copy()
+        #     emotions["eye_contact"] = max(0, emotions.get("eye_contact", 0.0) - baseline.eye_contact)
+        #     emotions["smile"] = max(0, emotions.get("smile", 0.0) - baseline.smile)
+        #     emotions["vocal_tone"] = max(0, emotions.get("vocal_tone", 0.0) - baseline.vocal_tone)
+        #     emotions["pacing"] = max(0, emotions.get("pacing", 0.0) - baseline.pacing)
+        #     emotions["engagement"] = max(0, emotions.get("engagement", 0.0) - baseline.engagement)
+
         visual = self._visual_score(emotions)
         vocal = self._vocal_score(emotions)
         emotional = self._emotional_score(emotions)
@@ -114,6 +125,20 @@ class FRSComputation:
         if listening >= MedalThresholds.LISTENING_MIN:
             medals.append("Adaptability")
 
+        # Calculate stars based on FRS score
+        if frs_score >= 9.0:
+            stars_earned = 5
+        elif frs_score >= 8.0:
+            stars_earned = 4
+        elif frs_score >= 7.0:
+            stars_earned = 3
+        elif frs_score >= 6.0:
+            stars_earned = 2
+        elif frs_score >= 5.0:
+            stars_earned = 1
+        else:
+            stars_earned = 0
+
         # Return nicely rounded values
         def r(x): return round(x, 2)
         return {
@@ -122,7 +147,8 @@ class FRSComputation:
             "confidence_selfregulation": r(confidence),
             "listening_reciprocal": r(listening),
             "frs_score": r(frs_score),
-            "medals": medals
+            "medals": medals,
+            "stars_earned": stars_earned
         }
 
     @staticmethod
@@ -158,5 +184,5 @@ class FRSComputation:
             listening_reciprocal=result["listening_reciprocal"],
             frs_score=result["frs_score"],
             medals=result["medals"],
-            stars_earned=1  # Default, can be calculated based on score
+            stars_earned=result["stars_earned"]
         )
