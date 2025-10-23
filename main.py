@@ -54,34 +54,59 @@ def get_calibration_steps():
     """
     steps = [
         CalibrationStep(
-            step_id="1",
+            step_id="line_1",
             instruction="Read aloud in a neutral tone",
-            line_to_read="Hello, how are you today?"
-        ),
-        CalibrationStep(
-            step_id="2",
-            instruction="Smile and read aloud in a friendly tone",
-            line_to_read="I'm so glad to meet you!"
-        ),
-        CalibrationStep(
-            step_id="3",
-            instruction="Read aloud in a flirtatious tone",
             line_to_read="Hey there! I saw you across the room and figured I'd come say hi."
         ),
         CalibrationStep(
-            step_id="4",
-            instruction="Read aloud assertively",
-            line_to_read="I really appreciate your time."
+            step_id="line_2",
+            instruction="Read aloud in a friendly tone",
+            line_to_read="Hi! I'm really enjoying this event so far."
         ),
         CalibrationStep(
-            step_id="5",
-            instruction="Show curiosity and read aloud",
-            line_to_read="That's really interesting, tell me more."
+            step_id="line_3",
+            instruction="Read aloud in a flirtatious tone",
+            line_to_read="You have such an interesting energy about you."
         ),
         CalibrationStep(
-            step_id="6",
-            instruction="Lean in slightly and nod while reading",
-            line_to_read="I completely understand."
+            step_id="line_4",
+            instruction="Read aloud in an assertive tone",
+            line_to_read="I'd love to continue this conversation if you're free."
+        ),
+        CalibrationStep(
+            step_id="expression_1",
+            instruction="Show a genuine smile",
+            expression="smiling"
+        ),
+        CalibrationStep(
+            step_id="expression_2",
+            instruction="Show curiosity",
+            expression="curiosity"
+        ),
+        CalibrationStep(
+            step_id="expression_3",
+            instruction="Show playful tone",
+            expression="playful"
+        ),
+        CalibrationStep(
+            step_id="expression_4",
+            instruction="Show sincere interest",
+            expression="sincere_interest"
+        ),
+        CalibrationStep(
+            step_id="gesture_1",
+            instruction="Lean in slightly",
+            gesture="lean_in"
+        ),
+        CalibrationStep(
+            step_id="gesture_2",
+            instruction="Shrug casually",
+            gesture="shrug"
+        ),
+        CalibrationStep(
+            step_id="gesture_3",
+            instruction="Nod in agreement",
+            gesture="nod"
         )
     ]
     return {"steps": [step.dict() for step in steps]}

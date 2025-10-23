@@ -136,6 +136,11 @@
         <div id="calibration" class="screen active">
             <h1>Initial Calibration</h1>
             <p>Before starting, let's calibrate the system to your natural communication style.</p>
+            <div id="calibration-video-container" style="display: none;">
+                <div class="video-container">
+                    <video id="calibration-video" autoplay playsinline muted></video>
+                </div>
+            </div>
             <div id="calibration-steps"></div>
             <button id="next-calibration">Next Step</button>
             <button id="complete-calibration" style="display: none;">Complete Calibration</button>
@@ -256,21 +261,33 @@
             const stepsContainer = document.getElementById('calibration-steps');
             if (currentStepIndex < calibrationSteps.length) {
                 const step = calibrationSteps[currentStepIndex];
+                const requiresVideo = step.expression || step.gesture;
                 stepsContainer.innerHTML = `
                     <div class="calibration-step">
                         <h3>Step ${currentStepIndex + 1}: ${step.instruction}</h3>
                         ${step.line_to_read ? `<p>Read aloud: "${step.line_to_read}"</p>` : ''}
                         ${step.expression ? `<p>Show expression: ${step.expression}</p>` : ''}
                         ${step.gesture ? `<p>Perform gesture: ${step.gesture}</p>` : ''}
+                        ${requiresVideo ? `<div class="video-container"><video id="calibration-video" autoplay playsinline muted></video></div>` : ''}
                         <button class="record-button" id="record-step-${currentStepIndex}">Record Response</button>
                         <div class="step-status" id="status-step-${currentStepIndex}"></div>
                     </div>
                 `;
                 document.getElementById(`record-step-${currentStepIndex}`).addEventListener('click', () => recordCalibrationStep(currentStepIndex));
+
+                // Start webcam preview if video is required
+                if (requiresVideo) {
+                    document.getElementById('calibration-video-container').style.display = 'block';
+                    startCalibrationVideo();
+                } else {
+                    document.getElementById('calibration-video-container').style.display = 'none';
+                    stopCalibrationVideo();
+                }
             } else {
                 stepsContainer.innerHTML = '<p>Calibration complete!</p>';
                 document.getElementById('next-calibration').style.display = 'none';
                 document.getElementById('complete-calibration').style.display = 'block';
+                stopCalibrationVideo();
             }
         }
 
@@ -279,55 +296,111 @@
             displayCalibrationStep();
         }
 
+        let calibrationVideoStream = null;
+
+        async function startCalibrationVideo() {
+            try {
+                if (!calibrationVideoStream) {
+                    calibrationVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                }
+                const videoElement = document.getElementById('calibration-video');
+                if (videoElement && calibrationVideoStream) {
+                    videoElement.srcObject = calibrationVideoStream;
+                }
+            } catch (error) {
+                console.error('Error starting calibration video:', error);
+            }
+        }
+
+        function stopCalibrationVideo() {
+            if (calibrationVideoStream) {
+                calibrationVideoStream.getTracks().forEach(track => track.stop());
+                calibrationVideoStream = null;
+            }
+        }
+
         async function recordCalibrationStep(stepIndex) {
             const button = document.getElementById(`record-step-${stepIndex}`);
             const statusDiv = document.getElementById(`status-step-${stepIndex}`);
+            const step = calibrationSteps[stepIndex];
             button.textContent = 'Recording...';
             button.classList.add('recording');
             button.disabled = true;
 
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Determine recording type based on step
+                let constraints = {};
+                let recordType = '';
+
+                if (step.line_to_read) {
+                    // Voice step - record audio only
+                    constraints = { audio: true };
+                    recordType = 'audio';
+                } else if (step.expression || step.gesture) {
+                    // Expression or gesture step - record video
+                    constraints = { video: true, audio: true };
+                    recordType = 'video';
+                }
+
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
                 const mediaRecorder = new MediaRecorder(stream);
-                const audioChunks = [];
+                const chunks = [];
 
                 mediaRecorder.ondataavailable = (event) => {
-                    audioChunks.push(event.data);
+                    chunks.push(event.data);
                 };
 
                 mediaRecorder.onstop = async () => {
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                    const formData = new FormData();
-                    formData.append('audio', audioBlob);
-                    formData.append('step_index', stepIndex);
+                    const mimeType = recordType === 'audio' ? 'audio/wav' : 'video/webm';
+                    const blob = new Blob(chunks, { type: mimeType });
+                    const reader = new FileReader();
+                    reader.onloadend = async () => {
+                        const base64Data = reader.result.split(',')[1];
+                        try {
+                            const payload = {
+                                user_id: userId,
+                                step_id: step.step_id
+                            };
 
-                    try {
-                        const response = await fetch('/api/calibration/analyze', {
-                            method: 'POST',
-                            body: formData
-                        });
-                        const data = await response.json();
+                            if (recordType === 'audio') {
+                                payload.audio = base64Data;
+                            } else {
+                                payload.video = base64Data;
+                            }
 
-                        if (data.success) {
-                            statusDiv.textContent = '✓ Calibration successful!';
-                            statusDiv.className = 'step-status success';
-                            calibrationData[stepIndex] = data.analysis;
-                        } else {
-                            statusDiv.textContent = '✗ Calibration failed. Please try again.';
+                            const response = await fetch('/api/calibrate/step', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            });
+                            const data = await response.json();
+
+                            if (data.success) {
+                                statusDiv.textContent = '✓ Calibration successful!';
+                                statusDiv.className = 'step-status success';
+                                calibrationData[stepIndex] = data.emotions;
+                                // Automatically advance to next step after successful calibration
+                                setTimeout(() => {
+                                    nextCalibrationStep();
+                                }, 2000);
+                            } else {
+                                statusDiv.textContent = '✗ Calibration failed. Please try again.';
+                                statusDiv.className = 'step-status failure';
+                            }
+                        } catch (error) {
+                            console.error('Error analyzing calibration:', error);
+                            statusDiv.textContent = '✗ Analysis failed. Please try again.';
                             statusDiv.className = 'step-status failure';
                         }
-                    } catch (error) {
-                        console.error('Error analyzing calibration:', error);
-                        statusDiv.textContent = '✗ Analysis failed. Please try again.';
-                        statusDiv.className = 'step-status failure';
-                    }
 
-                    button.textContent = 'Record Response';
-                    button.classList.remove('recording');
-                    button.disabled = false;
+                        button.textContent = 'Record Response';
+                        button.classList.remove('recording');
+                        button.disabled = false;
 
-                    // Stop all tracks
-                    stream.getTracks().forEach(track => track.stop());
+                        // Stop all tracks
+                        stream.getTracks().forEach(track => track.stop());
+                    };
+                    reader.readAsDataURL(blob);
                 };
 
                 mediaRecorder.start();
@@ -336,7 +409,7 @@
                 }, 5000); // Record for 5 seconds
             } catch (error) {
                 console.error('Error recording calibration:', error);
-                statusDiv.textContent = '✗ Recording failed. Please check microphone permissions.';
+                statusDiv.textContent = '✗ Recording failed. Please check camera/microphone permissions.';
                 statusDiv.className = 'step-status failure';
                 button.textContent = 'Record Response';
                 button.classList.remove('recording');
@@ -347,14 +420,13 @@
         async function completeCalibration() {
             // Send calibration data to backend
             try {
-                const response = await fetch('/api/calibration/complete', {
+                const response = await fetch('/api/calibrate/complete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, calibration_data: calibrationData })
+                    body: JSON.stringify({ user_id: userId })
                 });
-                const data = await response.json();
-                if (data.success) {
-                    personality = data.personality;
+                if (response.ok) {
+                    personality = 'calm'; // Default personality after calibration
                 }
             } catch (error) {
                 console.error('Error completing calibration:', error);

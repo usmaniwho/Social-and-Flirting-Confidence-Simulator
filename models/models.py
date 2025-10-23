@@ -15,6 +15,12 @@ class CalibrationData(BaseModel):
     steps_completed: List[str]
     baseline_emotions: Dict[str, Dict[str, float]]  # Changed to Dict[str, Dict[str, float]] for per-step emotions
 
+class CalibrateStepRequest(BaseModel):
+    user_id: str
+    step_id: str
+    audio: Optional[str] = None
+    video: Optional[str] = None
+
 class ConversationTranscript(BaseModel):
     session_id: str
     transcript: List[Dict[str, str]]  # List of {"role": "user" or "assistant", "content": text}
