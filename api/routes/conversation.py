@@ -1,3 +1,46 @@
+# conversation.py
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+from core.session_store import session_store
+
+router = APIRouter()
+
+class SendMessageRequest(BaseModel):
+    session_id: str
+    message: str
+
+@router.post("/send")
+def send_message(request: SendMessageRequest):
+    """
+    Send a message in a conversation session.
+    """
+    session = session_store.get_session(request.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Add user message to conversation history
+    if 'conversation_history' not in session:
+        session['conversation_history'] = []
+    session['conversation_history'].append({"role": "user", "content": request.message})
+
+    # For now, just store the message. AI response will be handled via WebSocket
+    session_store.save_session(request.session_id, session)
+
+    return {"status": "Message sent"}
+
+@router.get("/conversation/history/{session_id}")
+def get_conversation_history(session_id: str):
+    """
+    Get conversation history for a session.
+    """
+    session = session_store.get_session(session_id)
+    if not session:
+        return {"messages": []}  # Return empty list if session not found
+
+    history = session.get('conversation_history', [])
+    return {"messages": history}
+
 # voice_call_router.py
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -69,22 +112,47 @@ async def voice_call(websocket: WebSocket):
             # Step 1️⃣: Decode incoming audio
             user_audio_bytes = base64.b64decode(audio_b64)
 
-            # Step 2️⃣: Transcribe using Whisper (async)
+            # Step 2️⃣: Transcribe via Whisper
             user_text = await transcribe_audio(user_audio_bytes)
             print(f"🗣️ User said: {user_text}")
 
-            # Step 3️⃣: Generate GPT reply (personality-matched)
-            gpt_reply = await gpt_client.generate_response(
-                user_text, personality, conversation_history
-            )
-            print(f"🤖 GPT replied: {gpt_reply}")
+            # ✅ Skip GPT call if transcription failed
+            if not user_text or user_text.strip() in ["", "[Could not transcribe audio]"]:
+                await websocket.send_json({
+                    "error": "Speech could not be transcribed properly. Please try again."
+                })
+                continue
+
+            # Step 3️⃣: Generate GPT reply
+            try:
+                # ✅ Ensure GPTClient internally uses AsyncOpenAI and formats messages=[...]
+                gpt_reply = await gpt_client.generate_response(
+                    user_text, personality, conversation_history
+                )
+
+                # ✅ Handle null or empty replies safely
+                if not gpt_reply or not gpt_reply.strip():
+                    gpt_reply = "I'm here, but I couldn't understand that clearly."
+
+                print(f"🤖 GPT replied: {gpt_reply}")
+
+            except Exception as gpt_error:
+                print(f"❌ GPT generation failed: {gpt_error}")
+                gpt_reply = "Sorry, I couldn't generate a response right now."
+                await websocket.send_json({"error": f"GPT failed: {str(gpt_error)}"})
+                continue
 
             # Step 4️⃣: Convert GPT text → speech using ElevenLabs
-            reply_audio_bytes = await elevenlabs_client.generate_speech(
-                gpt_reply, personality
-            )
-
-            reply_audio_b64 = base64.b64encode(reply_audio_bytes).decode("utf-8")
+            try:
+                reply_audio_bytes = await elevenlabs_client.generate_speech(
+                    gpt_reply, personality
+                )
+                reply_audio_b64 = base64.b64encode(reply_audio_bytes).decode("utf-8")
+            except Exception as tts_error:
+                print(f"❌ TTS generation failed: {tts_error}")
+                reply_audio_b64 = None
+                await websocket.send_json({"error": f"TTS failed: {str(tts_error)}"})
+                # Continue without audio
 
             # Step 5️⃣: Update conversation history (not yet in DB schema)
             conversation_history += [
@@ -104,11 +172,13 @@ async def voice_call(websocket: WebSocket):
                 print(f"SessionStore stream log error: {e}")
 
             # Step 6️⃣: Send back both transcript + AI audio
-            await websocket.send_json({
+            response_data = {
                 "user_text": user_text,
-                "reply_text": gpt_reply,
-                "reply_audio": reply_audio_b64
-            })
+                "reply_text": gpt_reply
+            }
+            if reply_audio_b64:
+                response_data["reply_audio"] = reply_audio_b64
+            await websocket.send_json(response_data)
 
     except WebSocketDisconnect:
         print("❌ Voice call ended")
@@ -128,18 +198,34 @@ async def voice_call(websocket: WebSocket):
 async def transcribe_audio(audio_bytes: bytes) -> str:
     """
     Convert incoming voice bytes to text using OpenAI Whisper (async).
-    Uses in-memory buffer to avoid temp file collisions.
+    Handles both WAV and WebM formats.
     """
     try:
-        # ✅ Use in-memory stream instead of temp files
-        audio_file = io.BytesIO(audio_bytes)
+        from pydub import AudioSegment
 
-        # ✅ Use async Whisper endpoint
+        audio_buffer = io.BytesIO(audio_bytes)
+
+        # Try to load as WAV, fallback to WebM
+        try:
+            audio_segment = AudioSegment.from_wav(audio_buffer)
+        except Exception:
+            audio_buffer.seek(0)
+            audio_segment = AudioSegment.from_file(audio_buffer, format="webm")
+
+        # Export clean WAV for Whisper API
+        wav_buffer = io.BytesIO()
+        audio_segment.export(wav_buffer, format="wav")
+        wav_buffer.seek(0)
+
+        # ✅ Use async Whisper transcription endpoint
         transcription = await openai_client.audio.transcriptions.create(
             model="whisper-1",
-            file=audio_file
+            file=wav_buffer
         )
-        return transcription.text.strip()
+
+        # ✅ Return cleaned text
+        text = transcription.text.strip() if transcription and transcription.text else ""
+        return text or "[Could not transcribe audio]"
 
     except Exception as e:
         print(f"⚠️ STT Error: {e}")

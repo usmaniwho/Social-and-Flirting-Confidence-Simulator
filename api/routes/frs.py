@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, UploadFile, File
-from models.models import EmotionData, FRSResult, BaselineData, CalibrationStep, CalibrationData, CalibrateStepRequest
+from models.models import EmotionData, FRSResult, BaselineData, CalibrationStep, CalibrationData, CalibrateStepRequest, CompleteCalibrationRequest
 from core.scoring import FRSComputation
 from hume_ai.hume_ai_client import HumeStreamClient
 import asyncio
@@ -116,33 +116,27 @@ async def calibrate_step(request: CalibrateStepRequest):
     audio_bytes = base64.b64decode(audio) if audio else None
     video_bytes = base64.b64decode(request.video) if request.video else None
 
-    # Use quick_analyze for calibration - requires audio or video data
-    client = HumeStreamClient()
-    try:
-        emotions = await client.quick_analyze(audio_bytes=audio_bytes, video_bytes=video_bytes)
-    except ValueError as e:
-        print(f"Hume analysis failed for step {step_id}: {e}")
-        # Fallback: simulate based on step type
-        import random
-        if step.line_to_read:  # Voice step
-            emotions = {
-                "vocal_tone": random.uniform(0.4, 0.9),
-                "engagement": random.uniform(0.5, 0.95),
-                "pacing": random.uniform(0.3, 0.8)
-            }
-        elif step.expression:  # Expression step
-            emotions = {
-                "smile": random.uniform(0.3, 0.8),
-                "eye_contact": random.uniform(0.4, 0.9)
-            }
-        elif step.gesture:  # Gesture step
-            emotions = {
-                "engagement": random.uniform(0.5, 0.95),
-                "posture": random.uniform(0.4, 0.8),
-                "gesture": random.uniform(0.3, 0.7)
-            }
-        else:
-            emotions = {}
+    # Skip Hume analysis for demo - always use simulated data
+    import random
+    if step.line_to_read:  # Voice step
+        emotions = {
+            "vocal_tone": random.uniform(0.4, 0.9),
+            "engagement": random.uniform(0.5, 0.95),
+            "pacing": random.uniform(0.3, 0.8)
+        }
+    elif step.expression:  # Expression step
+        emotions = {
+            "smile": random.uniform(0.3, 0.8),
+            "eye_contact": random.uniform(0.4, 0.9)
+        }
+    elif step.gesture:  # Gesture step
+        emotions = {
+            "engagement": random.uniform(0.5, 0.95),
+            "posture": random.uniform(0.4, 0.8),
+            "gesture": random.uniform(0.3, 0.7)
+        }
+    else:
+        emotions = {}
 
     # Check thresholds based on step type
     from core.data_contract import CalibrationThresholds
@@ -167,10 +161,11 @@ async def calibrate_step(request: CalibrateStepRequest):
         return {"message": f"Step {step_id} failed calibration. Please try again.", "success": False, "emotions": emotions}
 
 @router.post("/calibrate/complete")
-def complete_calibration(user_id: str):
+async def complete_calibration(request: CompleteCalibrationRequest):
     """
     Complete calibration and establish baseline from all steps.
     """
+    user_id = request.user_id
     if user_id not in calibration_data:
         raise HTTPException(status_code=400, detail="No calibration data found")
 

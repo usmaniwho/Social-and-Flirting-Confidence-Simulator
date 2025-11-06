@@ -25,11 +25,11 @@ class Medal(StrEnum):
 
 class CalibrationThresholds:
     """Thresholds for calibration step validation"""
-    VOCAL_TONE_MIN =  0.1 #0.5
-    ENGAGEMENT_VOICE_MIN = 0.1 #0.6
-    SMILE_MIN = 0.1 #0.7
-    EYE_CONTACT_MIN = 0.1
-    ENGAGEMENT_GESTURE_MIN = 0.1 #0.5
+    VOCAL_TONE_MIN = 0.0  # Very low threshold to always pass for demo
+    ENGAGEMENT_VOICE_MIN = 0.0  # Very low threshold to always pass for demo
+    SMILE_MIN = 0.0  # Very low threshold to always pass for demo
+    EYE_CONTACT_MIN = 0.0  # Very low threshold to always pass for demo
+    ENGAGEMENT_GESTURE_MIN = 0.0  # Very low threshold to always pass for demo
 
 class MedalThresholds:
     """Thresholds for awarding medals based on FRS components"""

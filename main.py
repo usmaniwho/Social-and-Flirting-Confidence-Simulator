@@ -12,11 +12,6 @@ from api.routes.frs import router as frs_router
 from api.routes.session import router as session_router
 from api.routes.conversation import router as conversation_router
 
-# ✅ NEW: Import real-time voice router
-# -------------------------------------
-# 💡 CHANGE: Added this import for the WebSocket voice call flow
-from api.routes.voice_stream import router as voice_router
-
 from core.constant import Constant
 from core.data_contract import DocumentationSections
 from core.session_store import session_store
@@ -35,16 +30,16 @@ sessions_db = {}
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# ✅ NEW: Import real-time voice router
+# -------------------------------------
+# 💡 CHANGE: Added this import for the WebSocket voice call flow
+from api.routes.voice_stream import router as voice_router
+
 # ✅ Include all routers
 app.include_router(frs_router, prefix="/api", tags=["FRS"])
 app.include_router(session_router, prefix="/session", tags=["Session"])
 app.include_router(conversation_router, prefix="/api", tags=["Conversation"])
-app.include_router(voice_router, prefix="/realtime", tags=["Voice Call"])
-
-# 💬 NEW: Add WebSocket router
-# -----------------------------
-# 🟢 This is where your `/ws/voice_call` endpoint is registered.
-app.include_router(voice_router, prefix="/realtime", tags=["Voice Call"])
+app.include_router(voice_router, prefix="/realtime", tags=["Voice Stream"])
 
 # Add calibration steps endpoint
 @app.get("/api/calibration/steps")
@@ -118,6 +113,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_websocket_origins=["*"],
 )
 
 # -------------------------------
@@ -212,16 +208,19 @@ def get_feedback_screen(session_id: str):
         feedback = "Keep practicing! Focus on eye contact and engagement."
 
     return {
-        "overall_frs": round(avg_frs_score, 1),
-        "breakdown": {
+        "final_frs": {
+            "frs_score": round(avg_frs_score, 1),
             "charisma_friendliness": round(avg_charisma_friendliness, 2),
             "emotional_attunement_empathy": round(avg_emotional_attunement_empathy, 2),
             "confidence_selfregulation": round(avg_confidence_selfregulation, 2),
-            "listening_reciprocal": round(avg_listening_reciprocal, 2)
+            "listening_reciprocal": round(avg_listening_reciprocal, 2),
+            "medals": medals
         },
-        "medals": medals,
+        "feedback": {
+            "overall": feedback
+        },
         "objectives_completed": [],
-        "feedback": feedback,
+        "transcript": [],
         "stars_earned": stars_earned
     }
 

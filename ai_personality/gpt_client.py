@@ -3,6 +3,9 @@ from openai import AsyncOpenAI
 import base64
 import tempfile
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class GPTClient:
     def __init__(self):
@@ -69,6 +72,62 @@ class GPTClient:
         # 🔹 Add emotional context before generation
         history = history + [{"role": "system", "content": f"Emotion context: {emotion_context}"}]
         return await self.generate_response(user_text, personality, history)
+
+    async def generate_streaming_response(self, user_text: str, personality: Personality, emotion_state: str, history: list):
+        """
+        Generate GPT response with streaming for real-time feel.
+        Yields chunks of text as they are generated.
+        """
+        emotion_context = {
+            "happy": "The user seems happy — match their cheerful tone with warm and positive energy.",
+            "focused": "The user seems focused — keep your tone confident and clear.",
+            "disengaged": "The user sounds disengaged — speak gently and try to re-engage with empathy.",
+            "excited": "The user sounds excited — reply with energy and enthusiasm.",
+            "stressed": "The user sounds stressed — calm them down with a relaxed and reassuring tone.",
+            "neutral": "Keep a balanced, natural tone.",
+        }.get(emotion_state, "Speak naturally and empathetically.")
+
+        personality_prompts = {
+            Personality.CALM: (
+                "You are calm, composed, and soothing. "
+                "You reply with empathy, patience, and warmth. "
+                "Keep your tone slow, balanced, and reassuring. "
+                "Express calm emotions subtly but clearly."
+            ),
+            Personality.SHY: (
+                "You are shy, gentle, and soft-spoken. "
+                "You reply politely and with small hesitations or short pauses. "
+                "Express emotions quietly, as if you're slightly nervous but kind."
+            ),
+            Personality.PLAYFUL: (
+                "You are playful, expressive, and full of energy. "
+                "You speak with enthusiasm and emotion, using fun phrases or light humor. "
+                "Express excitement and positivity vividly."
+            )
+        }
+
+        system_message = {
+            "role": "system",
+            "content": (
+                f"You are an emotional AI voice companion. {personality_prompts.get(personality)} "
+                "Always speak naturally as if you are talking in a real voice call. "
+                f"Emotion context: {emotion_context}"
+            ),
+        }
+
+        messages = [system_message] + history[-10:] + [{"role": "user", "content": user_text}]
+
+        stream = await self.client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.9,
+            max_tokens=250,
+            stream=True  # Enable streaming
+        )
+
+        async for chunk in stream:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
     async def transcribe_audio(self, audio_bytes: bytes) -> str:
         """

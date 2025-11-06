@@ -1,54 +1,31 @@
-# TODO: Integrate Hume AI Evaluation for Calibration Steps
+# TODO: Implement GPT Functionality for Audio Upload
 
 ## Overview
-Modify the calibration process to use Hume AI for evaluating each step. Only advance to the next step if Hume confirms calibration, and only start sessions after all calibration steps are fulfilled.
+Implement a POST endpoint `/audio_response/{session_id}` in `session.py` that handles the full audio-to-response pipeline: STT (Whisper) → GPT → TTS (ElevenLabs) → Return text + audio.
 
-## Steps to Complete
+## Steps
+- [ ] Add new endpoint `/audio_response/{session_id}` in `api/routes/session.py`
+  - Accept POST with `session_id` and `audio` (base64 encoded)
+  - Decode audio bytes
+  - Transcribe audio to text using Whisper (via `gpt_client.transcribe_audio`)
+  - Retrieve conversation history from session
+  - Generate GPT response using `gpt_client.generate_response`
+  - Generate TTS audio using `ElevenLabsClient.generate_speech`
+  - Update conversation history in session store
+  - Optionally, analyze emotions with Hume AI for FRS scoring
+  - Return JSON: `{"response": text, "audio": base64_audio, "user_text": transcribed_text, "emotions": {...}}`
+- [ ] Test the endpoint with sample audio
+- [ ] Ensure error handling for transcription, GPT, TTS failures
+- [ ] Update session store with new conversation entries
+- [ ] Integrate FRS scoring if emotions are analyzed
 
-### 1. Define Calibration Thresholds
-- Define success criteria for each type of calibration step (voice, expression, gesture) based on Hume metrics.
-  - Voice steps (line_1 to line_4): vocal_tone > 0.5, engagement > 0.6
-  - Expression steps (expression_1 to expression_4): smile > 0.7, eye_contact > 0.6
-  - Gesture steps (gesture_1 to gesture_3): Use body data if available, e.g., posture > 0.5 or specific gesture detection.
+## Dependencies
+- Whisper API (OpenAI)
+- GPT-4o-mini
+- ElevenLabs TTS
+- Hume AI for emotions (optional)
 
-### 2. Update /calibrate/step Endpoint in api/routes/frs.py
-- Modify the endpoint to accept audio/video data (base64 encoded).
-- Decode and analyze with Hume quick_analyze.
-- Check metrics against step-specific thresholds.
-- Only mark step as completed if thresholds are met; return success/failure response.
-- Store calibration data per user.
-
-### 3. Update Frontend Calibration in static/index.html
-- For each step, prompt user to perform the action (read line, show expression, perform gesture).
-- Capture audio/video using getUserMedia.
-- Send captured data to /calibrate/step via POST.
-- Display result: if failed, show retry button; if passed, advance to next step.
-- Only show "Complete Calibration" after all steps are passed.
-
-### 4. Modify /start Endpoint in api/routes/session.py
-- Before starting a session, check if the user has completed all calibration steps.
-- If not, return an error or redirect to calibration.
-- Use calibration_data or session_store to verify completion.
-
-### 5. Update Session Store for Calibration Status
-- Modify core/session_store.py to persist calibration status per user (e.g., completed_steps list).
-- Ensure calibration data is stored across sessions.
-
-### 6. Handle Errors and Fallbacks
-- If Hume analysis fails, provide fallback (e.g., simulate success for testing) or notify user.
-- Add error handling in frontend and backend.
-
-### 7. Test Integration
-- Test Hume API integration.
-- Verify frontend captures and sends data correctly.
-- Ensure sessions only start after full calibration.
-- Test edge cases: Hume failure, user retry, etc.
-
-## Progress Tracking
-- [ ] Step 1: Define thresholds
-- [ ] Step 2: Update /calibrate/step
-- [ ] Step 3: Update frontend
-- [ ] Step 4: Modify /start
-- [ ] Step 5: Update session store
-- [ ] Step 6: Error handling
-- [ ] Step 7: Testing
+## Notes
+- Audio format: Assume base64 encoded WAV/MP3/WebM, convert if needed (use pydub as in voice_stream.py)
+- Personality: Use session's personality
+- Conversation history: Keep last 20 messages

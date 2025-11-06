@@ -7,6 +7,8 @@ import json
 import base64
 from core import session_store
 from hume_ai import analyze  # Use the analyze function from hume_ai/__init__.py
+from elevenlabs_client import ElevenLabsClient
+from core.data_contract import Personality
 
 router = APIRouter()
 
@@ -73,7 +75,7 @@ scenarios = {
 }
 
 @router.post("/start")
-def start_session(payload: SessionCreate):
+async def start_session(payload: SessionCreate):
     """
     Start a new session with the given parameters.
     Temporarily relaxed calibration requirement for testing - only requires 1 step.
@@ -92,6 +94,12 @@ def start_session(payload: SessionCreate):
     scenario_data = mode_scenarios.get(payload.scenario, {"objective": ScenarioObjective(main="", bonus=[], medal_conditions=[]), "prompt": ""})
     scenario_obj = scenario_data["objective"]
     scenario_prompt = scenario_data["prompt"]
+
+    # Generate TTS for the prompt
+    tts_client = ElevenLabsClient()
+    personality = Personality(payload.personality)
+    prompt_audio_bytes = await tts_client.generate_speech(scenario_prompt, personality)
+    prompt_audio_b64 = base64.b64encode(prompt_audio_bytes).decode("utf-8") if prompt_audio_bytes else ""
 
     # Store session in SQLite DB
     from core.session_store import session_store
@@ -113,7 +121,8 @@ def start_session(payload: SessionCreate):
         "scenario": payload.scenario,
         "personality": payload.personality,
         "objectives": scenario_obj,
-        "prompt": scenario_prompt
+        "prompt": scenario_prompt,
+        "prompt_audio": prompt_audio_b64
     }
 
 @router.post("/summary", response_model=SessionSummary)
@@ -122,7 +131,7 @@ def summarize_session(summary: SessionSummary):
     return summary
 
 @router.post("/end/{session_id}")
-def end_session(session_id: str):
+async def end_session(session_id: str):
     """
     End the session, compute accumulated FRS, and store summary in DB.
     """
@@ -214,6 +223,13 @@ def end_session(session_id: str):
         # Objectives completed (simulate based on session objectives)
         objectives_completed = session.get("objectives", {}).get("bonus", [])[:stars_earned]
 
+    # Generate TTS for feedback
+    tts_client = ElevenLabsClient()
+    personality = Personality(session.get('personality', Personality.CALM.value))
+    feedback_text = feedback.get("overall", "")
+    feedback_audio_bytes = await tts_client.generate_speech(feedback_text, personality)
+    feedback_audio_b64 = base64.b64encode(feedback_audio_bytes).decode("utf-8") if feedback_audio_bytes else ""
+
     # Store summary in DB
     summary_data = {
         'user_id': session['user_id'],
@@ -246,6 +262,7 @@ def end_session(session_id: str):
         "session_id": session_id,
         "final_frs": final_frs.dict(),
         "feedback": feedback,
+        "feedback_audio": feedback_audio_b64,
         "objectives_completed": objectives_completed,
         "stars_earned": stars_earned,
         "transcript": transcript
@@ -278,6 +295,9 @@ from pydantic import BaseModel
 
 class UserMessage(BaseModel):
     user_message: str
+
+class AudioMessage(BaseModel):
+    audio: str  # base64 encoded audio
 
 @router.post("/ai_response/{session_id}")
 async def generate_ai_response(session_id: str, user_message: UserMessage):
@@ -324,6 +344,93 @@ async def generate_ai_response(session_id: str, user_message: UserMessage):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate AI response: {str(e)}")
+
+@router.post("/audio_response/{session_id}")
+async def generate_audio_response(session_id: str, audio_message: AudioMessage):
+    """
+    Handle audio upload: STT → GPT → TTS → Return text + audio.
+    """
+    from core.session_store import session_store
+    from ai_personality import GPTClient
+    from elevenlabs_client import ElevenLabsClient
+    from core.data_contract import Personality
+    from hume_ai import analyze as hume_analyze
+    from core.scoring import FRSComputation
+    from api.routes.frs import accumulated_frs
+    import base64
+    import io
+    from pydub import AudioSegment
+
+    session = session_store.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    personality = session.get('personality')
+    if not personality:
+        raise HTTPException(status_code=400, detail="No personality set for this session")
+
+    try:
+        gpt_client = GPTClient()
+        elevenlabs_client = ElevenLabsClient()
+        frs_engine = FRSComputation()
+
+        # Decode base64 audio
+        audio_b64 = audio_message.audio
+        audio_bytes = base64.b64decode(audio_b64)
+
+        # Convert audio to WAV if needed (assume WebM from frontend, convert to WAV for Whisper)
+        try:
+            webm_audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="webm")
+            wav_buffer = io.BytesIO()
+            webm_audio.export(wav_buffer, format="wav")
+            wav_buffer.seek(0)
+            setattr(wav_buffer, "name", "audio.wav")
+            audio_for_stt = wav_buffer
+        except Exception as e:
+            # If conversion fails, assume it's already WAV/MP3
+            audio_for_stt = io.BytesIO(audio_bytes)
+            setattr(audio_for_stt, "name", "audio.wav")
+
+        # Step 1: STT - Transcribe audio to text
+        user_text = await gpt_client.transcribe_audio(audio_bytes)
+        if not user_text:
+            user_text = "[Transcription failed or no speech detected]"
+
+        # Step 2: Analyze emotions with Hume AI (optional for FRS)
+        emotions = {}
+        try:
+            emotions = await hume_analyze(audio_bytes, None)
+        except Exception as e:
+            print(f"Hume analysis failed: {e}")
+            emotions = {"emotion_state": "neutral"}
+
+        # Step 3: GPT processing
+        conversation_history = session.get('conversation_history', [])
+        response = await gpt_client.generate_response(user_text, Personality(personality), conversation_history)
+
+        # Step 4: TTS - Generate speech
+        audio_bytes_tts = await elevenlabs_client.generate_speech(response, Personality(personality))
+        audio_b64_tts = base64.b64encode(audio_bytes_tts).decode('utf-8') if audio_bytes_tts else ""
+
+        # Update conversation history
+        conversation_history.append({"role": "user", "content": user_text})
+        conversation_history.append({"role": "assistant", "content": response})
+        session['conversation_history'] = conversation_history[-20:]
+        session_store.save_session(session_id, session)
+
+        # Update FRS if emotions available
+        if emotions:
+            frs_score = frs_engine.update_metrics(session_id, emotions)
+            accumulated_frs.setdefault(session_id, []).append(frs_score)
+
+        return {
+            "response": response,
+            "audio": audio_b64_tts,
+            "user_text": user_text,
+            "emotions": emotions
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to process audio response: {str(e)}")
 
 
 # ==============================================

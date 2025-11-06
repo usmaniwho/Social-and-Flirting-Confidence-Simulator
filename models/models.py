@@ -21,6 +21,9 @@ class CalibrateStepRequest(BaseModel):
     audio: Optional[str] = None
     video: Optional[str] = None
 
+class CompleteCalibrationRequest(BaseModel):
+    user_id: str
+
 class ConversationTranscript(BaseModel):
     session_id: str
     transcript: List[Dict[str, str]]  # List of {"role": "user" or "assistant", "content": text}

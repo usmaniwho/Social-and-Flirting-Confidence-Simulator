@@ -48,3 +48,43 @@ dist/
 
 # Environment variables file
 .env
+
+# Audio files and temporary audio data
+*.wav
+*.mp3
+*.webm
+*.ogg
+*.flac
+audio_temp/
+temp_audio/
+
+# API keys and secrets (if any are stored locally)
+secrets.json
+config.json
+
+# Session data and caches
+sessions/
+cache/
+*.cache
+
+# Node.js / Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Frontend build outputs
+frontend/build/
+frontend/dist/
+frontend/.next/
+frontend/out/
+
+# React / Next.js specific
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Package files
+package-lock.json
+package.json

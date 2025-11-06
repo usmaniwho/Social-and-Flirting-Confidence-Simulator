@@ -1,5 +1,5 @@
 import os
-import elevenlabs
+import elevenlabs  # ✅ your original import kept
 from core.data_contract import Personality
 from dotenv import load_dotenv
 
@@ -10,8 +10,9 @@ class ElevenLabsClient:
         self.api_key = api_key or os.getenv("ELEVENLABS_API_KEY")
         if not self.api_key:
             raise ValueError("ELEVENLABS_API_KEY environment variable not set")
-        elevenlabs.set_api_key(self.api_key)
 
+        # ✅ old SDK method
+        elevenlabs.set_api_key(self.api_key)
     def get_voice_for_personality(self, personality: Personality) -> str:
         """Get the voice ID for a specific personality."""
         voice_map = {
@@ -65,6 +66,11 @@ class ElevenLabsClient:
             # Return empty bytes on error to prevent crashes
             return b""
 
+    def estimate_cost(self, text: str) -> int:
+        """Estimate the cost in ElevenLabs credits for the given text."""
+        # ElevenLabs charges based on characters, approximately 1 credit per 1000 characters
+        return max(1, len(text) // 1000)
+
     # 🔹 ADDED: Optional real-time stream generator (for WebSocket chunk sending)
     async def stream_speech_chunks(self, text: str, personality: Personality):
         """
@@ -74,12 +80,15 @@ class ElevenLabsClient:
         """
         try:
             voice_id = self.get_voice_for_personality(personality)
-            stream = elevenlabs.stream(
+            voice_settings = self.get_voice_settings_for_personality(personality)
+            stream = elevenlabs.generate(
                 text=text,
                 voice=voice_id,
-                model="eleven_monolingual_v1"
+                model="eleven_monolingual_v1",
+                stream=True,
+                **voice_settings
             )
-            async for chunk in stream:
+            for chunk in stream:
                 yield chunk  # send chunk to WebSocket in real-time
         except Exception as e:
             print(f"Error streaming ElevenLabs audio: {e}")
