@@ -48,3 +48,4 @@ dist/
 
 # Environment variables file
 .env
+node_modules
